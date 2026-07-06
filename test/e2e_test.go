@@ -1,0 +1,284 @@
+// Package e2e drives the built zjump binary end-to-end. These tests are
+// dependency-free (they exec only zjump itself, not bash/zsh/fzf), so they run
+// in the default `go test ./...` path (A-8). Interactive fzf/shell behavior is
+// covered separately behind the `shelltests` build tag.
+package e2e
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+var zjumpBin string
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "zjump-e2e-")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(dir)
+
+	zjumpBin = filepath.Join(dir, "zjump")
+	build := exec.Command("go", "build", "-o", zjumpBin, "./cmd/zjump")
+	build.Dir = ".." // module root
+	if out, err := build.CombinedOutput(); err != nil {
+		panic("build failed: " + err.Error() + "\n" + string(out))
+	}
+	os.Exit(m.Run())
+}
+
+type result struct {
+	stdout string
+	stderr string
+	code   int
+}
+
+// run executes zjump with args under a fresh data dir (unless one is supplied
+// via extraEnv). extraEnv entries are "KEY=VALUE".
+func run(t *testing.T, dataDir string, extraEnv []string, args ...string) result {
+	t.Helper()
+	cmd := exec.Command(zjumpBin, args...)
+	cmd.Env = append(os.Environ(), "_ZJUMP_DATA_DIR="+dataDir)
+	cmd.Env = append(cmd.Env, extraEnv...)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	code := 0
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else {
+			t.Fatalf("run(%v): %v", args, err)
+		}
+	}
+	return result{stdout.String(), stderr.String(), code}
+}
+
+func TestAddQueryRemove(t *testing.T) {
+	data := t.TempDir()
+	root := t.TempDir()
+	be := filepath.Join(root, "proj", "backend")
+	fe := filepath.Join(root, "proj", "frontend")
+	os.MkdirAll(be, 0o755)
+	os.MkdirAll(fe, 0o755)
+
+	run(t, data, nil, "add", be)
+	run(t, data, nil, "add", be) // rank now 2
+	run(t, data, nil, "add", fe)
+
+	// Best match: backend outranks frontend.
+	if got := strings.TrimSpace(run(t, data, nil, "query", "backend").stdout); got != be {
+		t.Errorf("query backend = %q, want %q", got, be)
+	}
+	// Two keywords, ordered.
+	if got := strings.TrimSpace(run(t, data, nil, "query", "proj", "back").stdout); got != be {
+		t.Errorf("query proj back = %q, want %q", got, be)
+	}
+	// --list shows both.
+	list := run(t, data, nil, "query", "--list").stdout
+	if !strings.Contains(list, be) || !strings.Contains(list, fe) {
+		t.Errorf("query --list missing entries:\n%s", list)
+	}
+
+	// remove, then it's gone.
+	if r := run(t, data, nil, "remove", be); r.code != 0 {
+		t.Errorf("remove failed: %s", r.stderr)
+	}
+	if strings.Contains(run(t, data, nil, "query", "--list").stdout, be) {
+		t.Error("backend still present after remove")
+	}
+}
+
+func TestScoreFormat(t *testing.T) {
+	data := t.TempDir()
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "x"), 0o755)
+	run(t, data, nil, "add", filepath.Join(root, "x"))
+	out := run(t, data, nil, "query", "--list", "--score").stdout
+	// rank 1.0, just-added => <1h bucket => score 4.0, 6-char field.
+	if !strings.HasPrefix(out, "   4.0 ") {
+		t.Errorf("score line = %q, want prefix '   4.0 '", out)
+	}
+}
+
+func TestNoMatch(t *testing.T) {
+	data := t.TempDir()
+	r := run(t, data, nil, "query", "definitelynotpresent")
+	if r.code == 0 {
+		t.Error("expected nonzero exit for no match")
+	}
+	if !strings.Contains(r.stderr, "no match found") {
+		t.Errorf("stderr = %q, want 'no match found'", r.stderr)
+	}
+}
+
+func TestNotADirectory(t *testing.T) {
+	data := t.TempDir()
+	f := filepath.Join(t.TempDir(), "afile")
+	os.WriteFile(f, []byte("x"), 0o644)
+	r := run(t, data, nil, "add", f)
+	if r.code == 0 || !strings.Contains(r.stderr, "not a directory") {
+		t.Errorf("want 'not a directory' error, got code=%d stderr=%q", r.code, r.stderr)
+	}
+}
+
+func TestRemoveNotFound(t *testing.T) {
+	data := t.TempDir()
+	r := run(t, data, nil, "remove", "/no/such/entry")
+	if r.code == 0 || !strings.Contains(r.stderr, "path not found in database") {
+		t.Errorf("want 'path not found' error, got code=%d stderr=%q", r.code, r.stderr)
+	}
+}
+
+func TestUnrecognizedSubcommand(t *testing.T) {
+	data := t.TempDir()
+	r := run(t, data, nil, "frobnicate")
+	if r.code == 0 || !strings.Contains(r.stderr, "unrecognized subcommand") {
+		t.Errorf("want 'unrecognized subcommand', got code=%d stderr=%q", r.code, r.stderr)
+	}
+}
+
+func TestRelativeDataDirRejected(t *testing.T) {
+	// Override the data dir with a relative path (R-ENV-1).
+	cmd := exec.Command(zjumpBin, "query", "x")
+	cmd.Env = append(os.Environ(), "_ZJUMP_DATA_DIR=relative/dir")
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err == nil {
+		t.Fatal("expected error for relative _ZJUMP_DATA_DIR")
+	}
+	if !strings.Contains(stderr.String(), "must be an absolute path") {
+		t.Errorf("stderr = %q, want 'must be an absolute path'", stderr.String())
+	}
+}
+
+func TestExcludeDirsSkipsAdd(t *testing.T) {
+	data := t.TempDir()
+	root := t.TempDir()
+	skip := filepath.Join(root, "skipme")
+	keep := filepath.Join(root, "keepme")
+	os.MkdirAll(skip, 0o755)
+	os.MkdirAll(keep, 0o755)
+
+	env := []string{"_ZJUMP_EXCLUDE_DIRS=" + filepath.Join(root, "skip*")}
+	run(t, data, env, "add", skip)
+	run(t, data, env, "add", keep)
+
+	list := run(t, data, nil, "query", "--list", "--all").stdout
+	if strings.Contains(list, skip) {
+		t.Errorf("excluded dir was added:\n%s", list)
+	}
+	if !strings.Contains(list, keep) {
+		t.Errorf("non-excluded dir missing:\n%s", list)
+	}
+}
+
+func TestExcludeDirsLazyDeleteOnQuery(t *testing.T) {
+	data := t.TempDir()
+	root := t.TempDir()
+	a := filepath.Join(root, "aaa")
+	b := filepath.Join(root, "bbb")
+	os.MkdirAll(a, 0o755)
+	os.MkdirAll(b, 0o755)
+	run(t, data, nil, "add", a)
+	run(t, data, nil, "add", b)
+
+	// Query with an exclude glob matching /aaa: it should be purged from the DB.
+	run(t, data, []string{"_ZJUMP_EXCLUDE_DIRS=" + a}, "query", "--list")
+	// Now without the exclude, /aaa must be gone permanently.
+	list := run(t, data, nil, "query", "--list", "--all").stdout
+	if strings.Contains(list, a) {
+		t.Errorf("excluded entry not lazily deleted:\n%s", list)
+	}
+	if !strings.Contains(list, b) {
+		t.Errorf("other entry wrongly removed:\n%s", list)
+	}
+}
+
+func TestBaseDir(t *testing.T) {
+	data := t.TempDir()
+	root := t.TempDir()
+	in := filepath.Join(root, "sub", "target")
+	out := filepath.Join(t.TempDir(), "elsewhere")
+	os.MkdirAll(in, 0o755)
+	os.MkdirAll(out, 0o755)
+	run(t, data, nil, "add", in)
+	run(t, data, nil, "add", out)
+
+	list := run(t, data, nil, "query", "--list", "--base-dir", root).stdout
+	if !strings.Contains(list, in) || strings.Contains(list, out) {
+		t.Errorf("--base-dir %s did not restrict correctly:\n%s", root, list)
+	}
+}
+
+func TestAllShowsNonexistent(t *testing.T) {
+	data := t.TempDir()
+	gone := filepath.Join(t.TempDir(), "willvanish")
+	os.MkdirAll(gone, 0o755)
+	run(t, data, nil, "add", gone)
+	os.RemoveAll(gone)
+
+	// Without --all, a nonexistent dir is filtered out.
+	if strings.Contains(run(t, data, nil, "query", "--list").stdout, gone) {
+		t.Error("nonexistent dir shown without --all")
+	}
+	// With --all, it's included.
+	if !strings.Contains(run(t, data, nil, "query", "--list", "--all").stdout, gone) {
+		t.Error("nonexistent dir hidden with --all")
+	}
+}
+
+func TestInitProducesScript(t *testing.T) {
+	data := t.TempDir()
+	for _, sh := range []string{"bash", "zsh"} {
+		out := run(t, data, nil, "init", sh).stdout
+		if !strings.Contains(out, "__zjump_z") || !strings.Contains(out, "function z()") {
+			t.Errorf("init %s missing expected content", sh)
+		}
+	}
+	// Unsupported shell is rejected.
+	if r := run(t, data, nil, "init", "fish"); r.code == 0 {
+		t.Error("init fish should be rejected (out of scope)")
+	}
+	// --no-cmd suppresses the z command.
+	out := run(t, data, nil, "init", "bash", "--no-cmd").stdout
+	if strings.Contains(out, "function z()") {
+		t.Error("--no-cmd should not define z()")
+	}
+	// --cmd renames.
+	out = run(t, data, nil, "init", "bash", "--cmd", "j").stdout
+	if !strings.Contains(out, "function j()") || !strings.Contains(out, "function ji()") {
+		t.Error("--cmd j should define j() and ji()")
+	}
+}
+
+// TestBrokenPipe checks silent-exit-0 on a broken stdout pipe (A-7, R-ERR-1).
+// Uses /bin/sh only for the pipeline; not the gated shell-integration suite.
+func TestBrokenPipe(t *testing.T) {
+	data := t.TempDir()
+	root := t.TempDir()
+	for _, n := range []string{"a", "b", "c", "d", "e"} {
+		d := filepath.Join(root, n)
+		os.MkdirAll(d, 0o755)
+		run(t, data, nil, "add", d)
+	}
+	cmd := exec.Command("/bin/sh", "-c", zjumpBin+" query --list | head -1")
+	cmd.Env = append(os.Environ(), "_ZJUMP_DATA_DIR="+data)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("pipeline errored: %v (stderr=%q)", err, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("broken pipe produced stderr: %q", stderr.String())
+	}
+	if len(strings.TrimSpace(string(out))) == 0 {
+		t.Error("expected at least one line from head")
+	}
+}

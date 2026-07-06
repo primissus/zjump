@@ -1,0 +1,188 @@
+# shellcheck shell=bash
+
+# =============================================================================
+#
+# Utility functions for zjump.
+#
+
+# pwd based on the value of _ZJUMP_RESOLVE_SYMLINKS.
+function __zjump_pwd() {
+    \builtin pwd {{- if .ResolveSymlinks }} -P{{ else }} -L{{ end }}
+}
+
+# cd + custom logic based on the value of _ZJUMP_ECHO.
+function __zjump_cd() {
+    # shellcheck disable=SC2164
+    \builtin cd -- "$@"{{ if .Echo }} && __zjump_pwd{{ end }}
+}
+
+# =============================================================================
+#
+# Hook configuration for zjump.
+#
+{{ if ne .Hook "none" }}
+# Hook to add new entries to the database.
+{{- if eq .Hook "prompt" }}
+function __zjump_hook() {
+    \builtin local -r retval="$?"
+    # shellcheck disable=SC2312
+    \command zjump add -- "$(__zjump_pwd)"
+    return "${retval}"
+}
+{{- else if eq .Hook "pwd" }}
+__zjump_oldpwd="$(__zjump_pwd)"
+
+function __zjump_hook() {
+    \builtin local -r retval="$?"
+    \builtin local pwd_tmp
+    pwd_tmp="$(__zjump_pwd)"
+    if [[ ${__zjump_oldpwd} != "${pwd_tmp}" ]]; then
+        __zjump_oldpwd="${pwd_tmp}"
+        \command zjump add -- "${__zjump_oldpwd}"
+    fi
+    return "${retval}"
+}
+{{- end }}
+
+# Initialize hook.
+if [[ ${PROMPT_COMMAND:=} != *'__zjump_hook'* ]]; then
+    if [[ "$(declare -p PROMPT_COMMAND 2>&1)" == "declare -a"* ]]; then
+        PROMPT_COMMAND=("${PROMPT_COMMAND[@]}" __zjump_hook)
+    else
+        # shellcheck disable=SC2128,SC2178
+        PROMPT_COMMAND="${PROMPT_COMMAND%"${PROMPT_COMMAND##*[![:space:];]}"}"
+        # shellcheck disable=SC2128,SC2178
+        PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND};}__zjump_hook"
+    fi
+fi
+{{- end }}
+
+# Report common issues.
+function __zjump_doctor() {
+{{- if eq .Hook "none" }}
+    return 0
+{{- else }}
+    [[ ${_ZJUMP_DOCTOR:-1} -eq 0 ]] && return 0
+    # shellcheck disable=SC2199
+    [[ ${PROMPT_COMMAND[@]:-} == *'__zjump_hook'* ]] && return 0
+    # shellcheck disable=SC2199
+    [[ ${__vsc_original_prompt_command[@]:-} == *'__zjump_hook'* ]] && return 0
+
+    _ZJUMP_DOCTOR=0
+    \builtin printf '%s\n' \
+        'zjump: detected a possible configuration issue.' \
+        'Please ensure that zjump is initialized right at the end of your shell configuration file (usually ~/.bashrc).' \
+        '' \
+        'Disable this message by setting _ZJUMP_DOCTOR=0.' \
+        '' >&2
+{{- end }}
+}
+
+# =============================================================================
+#
+# When using zjump with --no-cmd, alias these internal functions as desired.
+#
+
+__zjump_z_prefix='zjump#'
+
+# Jump to a directory using only keywords.
+function __zjump_z() {
+    __zjump_doctor
+
+    # shellcheck disable=SC2199
+    if [[ $# -eq 0 ]]; then
+        __zjump_cd ~
+    elif [[ $# -eq 1 && $1 == '-' ]]; then
+        __zjump_cd "${OLDPWD}"
+    elif [[ $# -eq 1 && -d $1 ]]; then
+        __zjump_cd "$1"
+    elif [[ $# -eq 2 && $1 == '--' ]]; then
+        __zjump_cd "$2"
+    elif [[ ${@: -1} == "${__zjump_z_prefix}"?* ]]; then
+        # shellcheck disable=SC2124
+        \builtin local result="${@: -1}"
+        __zjump_cd "${result:${#__zjump_z_prefix}}"
+    else
+        \builtin local result
+        # shellcheck disable=SC2312
+        result="$(\command zjump query --exclude "$(__zjump_pwd)" -- "$@")" &&
+            __zjump_cd "${result}"
+    fi
+}
+
+# Jump to a directory using interactive search.
+function __zjump_zi() {
+    __zjump_doctor
+    \builtin local result
+    result="$(\command zjump query --interactive -- "$@")" && __zjump_cd "${result}"
+}
+
+# =============================================================================
+#
+# Commands for zjump. Disable these using --no-cmd.
+#
+{{ if .HasCmd }}
+\builtin unalias {{ .Cmd }} &>/dev/null || \builtin true
+function {{ .Cmd }}() {
+    __zjump_z "$@"
+}
+
+\builtin unalias {{ .Cmd }}i &>/dev/null || \builtin true
+function {{ .Cmd }}i() {
+    __zjump_zi "$@"
+}
+
+# Load completions.
+# - Bash 4.4+ is required to use `@Q`.
+# - Completions require line editing (vi or emacs mode).
+# - Completions don't work on `dumb` terminals.
+if [[ ${BASH_VERSINFO[0]:-0} -eq 4 && ${BASH_VERSINFO[1]:-0} -ge 4 || ${BASH_VERSINFO[0]:-0} -ge 5 ]] &&
+    [[ :"${SHELLOPTS}": =~ :(vi|emacs): && ${TERM} != 'dumb' ]]; then
+
+    function __zjump_z_complete_helper() {
+        READLINE_LINE="{{ .Cmd }} ${__zjump_result@Q}"
+        READLINE_POINT=${#READLINE_LINE}
+        bind '"\e[0n": accept-line'
+        \builtin printf '\e[5n' >/dev/tty
+    }
+
+    function __zjump_z_complete() {
+        # Only show completions when the cursor is at the end of the line.
+        [[ ${#COMP_WORDS[@]} -eq $((COMP_CWORD + 1)) ]] || return
+
+        # If there is only one argument, use `cd` completions.
+        if [[ ${#COMP_WORDS[@]} -eq 2 ]]; then
+            \builtin mapfile -t COMPREPLY < <(
+                \builtin compgen -A directory -- "${COMP_WORDS[-1]}" || \builtin true
+            )
+        # If there is a space after the last word, use interactive selection.
+        elif [[ -z ${COMP_WORDS[-1]} ]]; then
+            # shellcheck disable=SC2312
+            if __zjump_result="$(\command zjump query --exclude "$(__zjump_pwd)" --interactive -- "${COMP_WORDS[@]:1:${#COMP_WORDS[@]}-2}" 2>/dev/null)"; then
+                # In case the terminal does not respond to \e[5n, still complete
+                # the directory on the command line.
+                COMPREPLY=("${__zjump_z_prefix}${__zjump_result}/")
+
+                # Call "bind" without \builtin to stay compatible with ble.sh.
+                bind -x '"\e[0n": __zjump_z_complete_helper'
+                \builtin printf '\e[5n' >/dev/tty
+            else
+                # The interactive selection was cancelled; redraw the line.
+                bind '"\e[0n": redraw-current-line'
+                \builtin printf '\e[5n' >/dev/tty
+            fi
+        fi
+    }
+
+    \builtin complete -F __zjump_z_complete -o filenames -- {{ .Cmd }}
+    \builtin complete -r {{ .Cmd }}i &>/dev/null || \builtin true
+fi
+{{- else }}
+# -- not configured --
+{{- end }}
+
+# =============================================================================
+#
+# To initialize zjump, add this to your shell configuration file (usually ~/.bashrc):
+#
+# eval "$(zjump init bash)"

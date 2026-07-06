@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (default, dependency-free)
+        run: go test ./...
+
+      # The gated suite shells out to real bash, zsh, and fzf (A-8).
+      - name: Install shell + fzf dependencies
+        run: sudo apt-get update && sudo apt-get install -y zsh fzf
+
+      - name: Test (gated shell + fzf)
+        run: go test -tags shelltests ./...

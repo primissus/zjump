@@ -1,0 +1,7 @@
+# Built binary
+/zjump
+/bin/
+
+# Go
+*.test
+*.out

@@ -1,0 +1,162 @@
+# shellcheck shell=bash
+
+# =============================================================================
+#
+# Utility functions for zjump.
+#
+
+# pwd based on the value of _ZJUMP_RESOLVE_SYMLINKS.
+function __zjump_pwd() {
+    \builtin pwd {{- if .ResolveSymlinks }} -P{{ else }} -L{{ end }}
+}
+
+# cd + custom logic based on the value of _ZJUMP_ECHO.
+function __zjump_cd() {
+    # shellcheck disable=SC2164
+    \builtin cd -- "$@"{{ if .Echo }} && __zjump_pwd{{ end }}
+}
+
+# =============================================================================
+#
+# Hook configuration for zjump.
+#
+
+# Hook to add new entries to the database.
+function __zjump_hook() {
+    # shellcheck disable=SC2312
+    \command zjump add -- "$(__zjump_pwd)"
+}
+
+# Initialize hook.
+\builtin typeset -ga precmd_functions
+\builtin typeset -ga chpwd_functions
+# shellcheck disable=SC2034,SC2296
+precmd_functions=("${(@)precmd_functions:#__zjump_hook}")
+# shellcheck disable=SC2034,SC2296
+chpwd_functions=("${(@)chpwd_functions:#__zjump_hook}")
+{{ if eq .Hook "prompt" }}
+precmd_functions+=(__zjump_hook)
+{{- else if eq .Hook "pwd" }}
+chpwd_functions+=(__zjump_hook)
+{{- end }}
+
+# Report common issues.
+function __zjump_doctor() {
+{{- if eq .Hook "none" }}
+    return 0
+{{- else }}
+    [[ ${_ZJUMP_DOCTOR:-1} -ne 0 ]] || return 0
+    [[ $- == *i* ]] || return 0
+{{ if eq .Hook "prompt" }}
+    [[ ${precmd_functions[(Ie)__zjump_hook]:-} -eq 0 ]] || return 0
+{{- else if eq .Hook "pwd" }}
+    [[ ${chpwd_functions[(Ie)__zjump_hook]:-} -eq 0 ]] || return 0
+{{- end }}
+
+    _ZJUMP_DOCTOR=0
+    \builtin printf '%s\n' \
+        'zjump: detected a possible configuration issue.' \
+        'Please ensure that zjump is initialized right at the end of your shell configuration file (usually ~/.zshrc).' \
+        '' \
+        'Disable this message by setting _ZJUMP_DOCTOR=0.' \
+        '' >&2
+{{- end }}
+}
+
+# =============================================================================
+#
+# When using zjump with --no-cmd, alias these internal functions as desired.
+#
+
+# Jump to a directory using only keywords.
+function __zjump_z() {
+    __zjump_doctor
+    if [[ "$#" -eq 0 ]]; then
+        __zjump_cd ~
+    elif [[ "$#" -eq 1 ]] && { [[ -d "$1" ]] || [[ "$1" = '-' ]] || [[ "$1" =~ ^[-+][0-9]+$ ]]; }; then
+        __zjump_cd "$1"
+    elif [[ "$#" -eq 2 ]] && [[ "$1" = "--" ]]; then
+        __zjump_cd "$2"
+    else
+        \builtin local result
+        # shellcheck disable=SC2312
+        result="$(\command zjump query --exclude "$(__zjump_pwd)" -- "$@")" && __zjump_cd "${result}"
+    fi
+}
+
+# Jump to a directory using interactive search.
+function __zjump_zi() {
+    __zjump_doctor
+    \builtin local result
+    result="$(\command zjump query --interactive -- "$@")" && __zjump_cd "${result}"
+}
+
+# =============================================================================
+#
+# Commands for zjump. Disable these using --no-cmd.
+#
+{{ if .HasCmd }}
+function {{ .Cmd }}() {
+    __zjump_z "$@"
+}
+
+function {{ .Cmd }}i() {
+    __zjump_zi "$@"
+}
+{{- else }}
+# -- not configured --
+{{- end }}
+
+# Completions.
+if [[ -o zle ]]; then
+    __zjump_result=''
+
+    function __zjump_z_complete() {
+        # Only show completions when the cursor is at the end of the line.
+        # shellcheck disable=SC2154
+        [[ "${#words[@]}" -eq "${CURRENT}" ]] || return 0
+
+        if [[ "${#words[@]}" -eq 2 ]]; then
+            # Show completions for local directories.
+            _cd -/
+        elif [[ "${words[-1]}" == '' ]]; then
+            # Show completions for Space-Tab.
+            # shellcheck disable=SC2086
+            __zjump_result="$(\command zjump query --exclude "$(__zjump_pwd || \builtin true)" --interactive -- ${words[2,-1]} 2>/dev/null)" || __zjump_result=''
+
+            # Set a result to ensure completion doesn't re-run.
+            compadd -Q -S "" -- ""
+
+            # Bind '\e[0n' to helper function.
+            \builtin bindkey '\e[0n' '__zjump_z_complete_helper'
+            # Send query device status code, which results in a '\e[0n' being sent to console input.
+            \builtin printf '\e[5n'
+
+            # Report a successful completion so we don't fall back to another function.
+            return 0
+        fi
+    }
+
+    function __zjump_z_complete_helper() {
+        if [[ -n "${__zjump_result}" ]]; then
+            # shellcheck disable=SC2034,SC2296
+            BUFFER="{{ if .HasCmd }}{{ .Cmd }}{{ else }}cd{{ end }} ${(q-)__zjump_result}"
+            __zjump_result=''
+            \builtin zle reset-prompt
+            \builtin zle accept-line
+        else
+            \builtin zle reset-prompt
+        fi
+    }
+    \builtin zle -N __zjump_z_complete_helper
+{{- if .HasCmd }}
+
+    [[ "${+functions[compdef]}" -ne 0 ]] && \compdef __zjump_z_complete {{ .Cmd }}
+{{- end }}
+fi
+
+# =============================================================================
+#
+# To initialize zjump, add this to your shell configuration file (usually ~/.zshrc):
+#
+# eval "$(zjump init zsh)"
