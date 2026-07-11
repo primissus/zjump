@@ -26,6 +26,10 @@
   that scope: the out-of-scope items (N-1..N-6 — `import`, non-bash/zsh shells,
   `db.zo` byte-compat, Windows, Levenshtein) remain out unless the user
   explicitly re-scopes them.
+- A second, signed-off scope extension (typed entries: repos, worktrees,
+  branches, aliases) is specified in [`PLAN-GIT.md`](./PLAN-GIT.md) with live
+  status in [`PROGRESS-GIT.md`](./PROGRESS-GIT.md). All its design decisions
+  are final; implement it exactly as written there.
 - The five deliberate deviations from zoxide (D-1..D-5) are intentional; keep
   them, and keep every one carrying its `D-n` ID in a code comment and README note.
 
