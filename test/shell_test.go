@@ -200,6 +200,122 @@ func TestBranchEndToEnd(t *testing.T) {
 	// non-interactive --filter mode, which is the only headless driver available.
 }
 
+// TestNewFunctionsRendered checks that zw/zr/zb are emitted (renamed by --cmd,
+// omitted by --no-cmd), with no completion wiring for them (G-10, R2-SH-1).
+func TestNewFunctionsRendered(t *testing.T) {
+	data := t.TempDir()
+	for _, shell := range []string{"bash", "zsh"} {
+		def := run(t, data, nil, "init", shell).stdout
+		for _, fn := range []string{"function zw()", "function zr()", "function zb()"} {
+			if !strings.Contains(def, fn) {
+				t.Errorf("%s default init missing %q", shell, fn)
+			}
+		}
+		renamed := run(t, data, nil, "init", shell, "--cmd", "j").stdout
+		for _, fn := range []string{"function jw()", "function jr()", "function jb()"} {
+			if !strings.Contains(renamed, fn) {
+				t.Errorf("%s --cmd j missing %q", shell, fn)
+			}
+		}
+		if strings.Contains(renamed, "function zw()") {
+			t.Errorf("%s --cmd j still defines zw()", shell)
+		}
+		none := run(t, data, nil, "init", shell, "--no-cmd").stdout
+		for _, fn := range []string{"function zw()", "function zr()", "function zb()"} {
+			if strings.Contains(none, fn) {
+				t.Errorf("%s --no-cmd should not define %q", shell, fn)
+			}
+		}
+		// No completion wiring for the new functions (G-10).
+		if strings.Contains(def, "complete -F __zjump_z_complete -o filenames -- zw") ||
+			strings.Contains(def, "compdef __zjump_z_complete zw") {
+			t.Errorf("%s wired completions for zw (should not, G-10)", shell)
+		}
+	}
+}
+
+// TestShellRepoWorktreeBranch drives zr/zw/zb and _ZJUMP_ECHO in real bash+zsh
+// against real git (R2-SH-2, §9 Phase 6).
+func TestShellRepoWorktreeBranch(t *testing.T) {
+	requireBin(t, "git")
+	for _, shell := range []string{"bash", "zsh"} {
+		requireBin(t, shell)
+
+		data := t.TempDir()
+		root := t.TempDir()
+		neutral := filepath.Join(root, "neutral")
+		repo := filepath.Join(root, "coolrepo")
+		wt := filepath.Join(root, "coolwt")
+		os.MkdirAll(neutral, 0o755)
+		gitInitRepo(t, repo)
+		git(t, repo, "worktree", "add", wt, "-b", "feature")
+		git(t, repo, "branch", "other") // a branch not checked out anywhere, safe to switch to
+
+		// Index the repo (auto-typed KindRepo).
+		run(t, data, nil, "add", repo)
+
+		wantRepo := strings.TrimSpace(run(t, data, nil, "query", "--type", "repo", "coolrepo").stdout)
+		wantWt := strings.TrimSpace(run(t, data, nil, "query", "--type", "worktree", "coolwt").stdout)
+		if wantRepo == "" || wantWt == "" {
+			t.Fatalf("%s: precondition: repo=%q wt=%q", shell, wantRepo, wantWt)
+		}
+
+		env := []string{"_ZJUMP_DATA_DIR=" + data}
+
+		// zr cd into the repo.
+		script := `eval "$(zjump init ` + shell + ` --hook none)"
+cd "` + neutral + `"
+zr coolrepo >/dev/null 2>&1
+echo "pwd=$(pwd)"`
+		out, code := execScript(t, shell, script, env)
+		if code != 0 || parseKV(out)["pwd"] != wantRepo {
+			t.Errorf("%s: zr -> %q, want %q (code=%d)", shell, parseKV(out)["pwd"], wantRepo, code)
+		}
+
+		// zw cd into the worktree.
+		script = `eval "$(zjump init ` + shell + ` --hook none)"
+cd "` + neutral + `"
+zw coolwt >/dev/null 2>&1
+echo "pwd=$(pwd)"`
+		out, code = execScript(t, shell, script, env)
+		if code != 0 || parseKV(out)["pwd"] != wantWt {
+			t.Errorf("%s: zw -> %q, want %q (code=%d)", shell, parseKV(out)["pwd"], wantWt, code)
+		}
+
+		// zb switches branch in the current repo.
+		script = `eval "$(zjump init ` + shell + ` --hook none)"
+cd "` + repo + `"
+zb other >/dev/null 2>&1
+echo "branch=$(\command git branch --show-current)"`
+		out, code = execScript(t, shell, script, env)
+		if code != 0 || parseKV(out)["branch"] != "other" {
+			t.Errorf("%s: zb -> branch %q, want 'other' (code=%d, out=%q)", shell, parseKV(out)["branch"], code, out)
+		}
+
+		// _ZJUMP_ECHO=1 makes zr print the destination (init must be rendered
+		// with the env set so the template bakes the echo).
+		echoEnv := append([]string{"_ZJUMP_ECHO=1"}, env...)
+		script = `eval "$(zjump init ` + shell + ` --hook none)"
+cd "` + neutral + `"
+zr coolrepo`
+		out, code = execScript(t, shell, script, echoEnv)
+		if code != 0 || !strings.Contains(out, wantRepo) {
+			t.Errorf("%s: zr with _ZJUMP_ECHO=1 out=%q, want it to contain %q", shell, out, wantRepo)
+		}
+	}
+}
+
+// parseKV parses "key=value" lines into a map.
+func parseKV(out string) map[string]string {
+	m := map[string]string{}
+	for _, ln := range strings.Split(strings.TrimSpace(out), "\n") {
+		if k, v, ok := strings.Cut(ln, "="); ok {
+			m[k] = v
+		}
+	}
+	return m
+}
+
 // splitLines returns the non-empty lines of s.
 func splitLines(s string) []string {
 	var out []string

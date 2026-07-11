@@ -54,6 +54,6 @@ implementation started)
 
 | ID | Work | Status | Notes |
 |---|---|---|---|
-| R2-SH-1 | `{{cmd}}w`/`{{cmd}}b`/`{{cmd}}r` in bash+zsh templates (no completions, G-10) | todo | |
-| R2-SH-2 | shelltests end-to-end for new functions | todo | |
-| R2-DOC-1 | README + AGENTS.md scope updates | todo | |
+| R2-SH-1 | `{{cmd}}w`/`{{cmd}}b`/`{{cmd}}r` in bash+zsh templates (no completions, G-10) | done | zw/zr (interactive on no args, `$PWD` excluded, echo honored) + zb (branch→git switch); gated by HasCmd; no completions |
+| R2-SH-2 | shelltests end-to-end for new functions | done | `TestNewFunctionsRendered` (render/--cmd/--no-cmd/no-completion), `TestShellRepoWorktreeBranch` (zr/zw/zb cd+switch, `_ZJUMP_ECHO`); existing template combos pass unmodified |
+| R2-DOC-1 | README + AGENTS.md scope updates | done | README: Typed-entries section, `--type`, index/alias/branch, zw/zr/zb, v2 one-way upgrade note, D-6; AGENTS.md D-1..D-6 |

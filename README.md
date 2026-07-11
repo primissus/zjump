@@ -16,9 +16,14 @@ zjump works on **bash** and **zsh** (Linux and macOS).
 [How it works](#how-it-works)
 
 > **Scope.** zjump implements broad behavioral parity with zoxide for the
-> `add`, `query`, `remove`, `init`, and `edit` commands. The `import` command,
-> shells other than bash/zsh, and Windows are **out of scope**; the database is
-> a zjump-native format, not byte-compatible with zoxide's `db.zo`. See
+> `add`, `query`, `remove`, `init`, and `edit` commands. It also adds
+> **typed-entry** capabilities zoxide lacks (**D-6**): jumping between git
+> **worktrees** and **repositories**, checking out **branches**, bulk
+> **indexing** of repos, and user-named **aliases** — all opt-in and additive
+> (see [Typed entries](#typed-entries-repos-worktrees-branches-aliases)). The
+> `import` command, shells other than bash/zsh, and Windows are **out of
+> scope**; the database is a zjump-native format, not byte-compatible with
+> zoxide's `db.zo`. See
 > [Deliberate deviations](#deliberate-deviations-from-zoxide).
 
 ## Getting started
@@ -36,6 +41,11 @@ z -                # cd into the previous directory
 zi foo             # cd with interactive selection (using fzf)
 
 z foo<SPACE><TAB>  # show interactive completions (bash 4.4+/zsh only)
+
+zr backend         # cd into an indexed git repository matching backend
+zw feature         # cd into a git worktree (across indexed repos) matching feature
+zr                 # no keywords -> interactive picker (same for zw)
+zb main            # switch the current repo to a branch matching main
 ```
 
 The `z` command tracks directories as you visit them and ranks them by
@@ -108,9 +118,11 @@ Core `z` jumping works without it.
 
 ## Commands
 
-The `zjump` binary exposes five subcommands. In everyday use you'll rarely call
+The `zjump` binary exposes eight subcommands. In everyday use you'll rarely call
 them directly — the `z`/`zi` shell functions and the tracking hook do it for you
-— but the full surface is documented here.
+— but the full surface is documented here. The typed-entry commands (`index`,
+`alias`, `branch`, and `query --type`) are described under
+[Typed entries](#typed-entries-repos-worktrees-branches-aliases).
 
 Global flags: `-h`/`--help`, `-V`/`--version`.
 
@@ -145,6 +157,7 @@ invoke under the hood.
 | `-a`, `--all` | Include directories that no longer exist (disables the existence filter). |
 | `--exclude <path>` | Skip this exact path in the results (never deletes it; used by `z` to exclude `$PWD`). |
 | `--base-dir <path>` | Only return matches that are component-wise under this directory. |
+| `--type <type>` | Restrict the candidate set: `dir`, `repo`, `worktree`, `alias`, or `any` (see [Typed entries](#typed-entries-repos-worktrees-branches-aliases)). Omitted = plain directories + repos, plus the alias fast path. |
 
 - Default mode prints the single best match, or errors `no match found`.
 - `zjump query --list | head` and other pipelines exit cleanly (silent, code 0)
@@ -179,6 +192,93 @@ inspect and adjust entries. Key bindings:
 > `edit` re-sorts the list after every change, so the ordering never goes stale
 > mid-session (see [deviations](#deliberate-deviations-from-zoxide)).
 
+## Typed entries (repos, worktrees, branches, aliases)
+
+Beyond plain directory jumping, zjump tracks **typed** entries and can jump
+between them. This is a capability zoxide lacks (**D-6**); everything here is
+additive and opt-in — with no `--type` and no new command, zjump behaves exactly
+as it always has.
+
+Each stored entry has a **kind**: a plain directory (`dir`), the root of a git
+repository (`repo`), or a user-named alias (`alias`). Repo roots are detected
+automatically — any path with a `.git` directory or file is stored as a repo
+(and a plain-dir entry is upgraded in place the first time it's seen as one; a
+repo is never downgraded). **Worktrees are never stored**: they're discovered
+live at query time from the indexed repos.
+
+### `zjump query --type <type>`
+
+`--type` chooses what the query searches:
+
+| Type | Candidates | Keywords match |
+| --- | --- | --- |
+| *(omitted)* | directories + repos (plus the alias fast path below) | path |
+| `dir` | plain directories only | path |
+| `repo` | repository roots only | path |
+| `worktree` | live-enumerated worktrees of indexed repos | worktree path |
+| `alias` | aliases (output is the target path) | alias **name** |
+| `any` | every stored entry (no worktree enumeration) | path, or name for aliases |
+
+Worktree enumeration streams your indexed repos best-frecency-first, runs
+`git worktree list` on each (bare worktrees skipped, detached HEADs labelled),
+de-duplicates shared paths, and probes at most the first 50 repos. No `git`
+subprocess ever runs unless `--type worktree` is requested.
+
+### `zjump index [--max-depth N] [--score S] <roots>...`
+
+Bulk-scan one or more roots for git repositories and index them (as `repo`
+entries). The walk records a repo root and does **not** descend into it (nested
+repos/submodules are out of scope), skips hidden directories, never follows
+symlinks, and descends at most `--max-depth` levels (default `3`; the root is
+depth 0). Each repo is added with score `S` (default `1.0`), so re-running
+refreshes frecency. A summary is printed to stderr.
+
+### `zjump alias add|rm|list`
+
+User-named shortcuts that resolve to paths.
+
+```sh
+zjump alias add work ~/src/project   # PATH defaults to the current directory
+zjump alias rm work
+zjump alias list [--score]           # name<TAB>path, best-score-first
+```
+
+- Names may not be empty, contain `/` or whitespace, start with `-`, or be the
+  bare cd-idioms `.`, `..`, `-`, or `~`.
+- Re-adding an existing name replaces its target in place, preserving rank.
+- **Multiple aliases may point at the same target** — alias identity is by name,
+  and a path can be a dir/repo entry and any number of alias targets at once.
+- Aliases are exempt from aging/cleanup: they're removed **only** by `alias rm`,
+  never by the aging pass, the existence filter, or `zjump remove`.
+
+**Alias fast path.** In plain `z foo` usage (a single keyword, non-interactive),
+zjump first checks aliases: an exact name match wins outright, otherwise the
+best-scoring name-prefix alias. A hit bumps that alias's rank and jumps to its
+target; otherwise the query falls through to normal directory matching. An alias
+whose target equals the excluded `$PWD` is passed over.
+
+### `zjump branch [pattern]`
+
+List the current repository's local branches and print the chosen one (the shell
+function runs the actual `git switch`). With a `pattern` that substring-matches
+exactly one branch, it prints that branch directly — no fzf needed, so it's
+scriptable. Otherwise it opens an fzf picker with the current branch marked and
+moved to the top. Errors `not inside a git repository` / `no branches found`.
+
+### Generated shell functions
+
+Alongside `z`/`zi`, `zjump init` defines three more functions (renamed by
+`--cmd`, all suppressed by `--no-cmd`):
+
+| Function | Behavior |
+| --- | --- |
+| `zw` | Jump to a worktree (`query --type worktree`); no keywords → interactive. |
+| `zr` | Jump to a repository (`query --type repo`); no keywords → interactive. |
+| `zb` | `zjump branch` then `git switch` to the selection. |
+
+`zw`/`zr` honor `_ZJUMP_ECHO` like `z`; cancelling the fzf picker (Ctrl-C) is
+silent. There are no Space-Tab completions for these three functions.
+
 ## Configuration
 
 ### `init` flags
@@ -202,9 +302,9 @@ When calling `zjump init`, the following flags are available:
     emulated: the hook runs at every prompt but only calls `zjump add` when the
     directory actually changed.
 - **`--no-cmd`** (alias `--no-aliases`)
-  - Prevents zjump from defining the `z` and `zi` commands. The underlying
-    functions remain available as `__zjump_z` and `__zjump_zi` if you want to
-    wire them up yourself.
+  - Prevents zjump from defining the `z`, `zi`, `zw`, `zr`, and `zb` commands.
+    The underlying `z`/`zi` functions remain available as `__zjump_z` and
+    `__zjump_zi` if you want to wire them up yourself.
 
 ### Environment variables
 
@@ -301,13 +401,22 @@ differences:
 - **D-1** — a zjump-native, versioned binary database (magic `ZJDB` + a version
   header, 32 MiB read guard) under a zjump-specific data directory and filename.
   It is **not** byte-compatible with zoxide's `db.zo` and can never be confused
-  with it.
+  with it. The current format is **version 2** (it adds per-entry kind + alias
+  name). A version-1 database still loads, and is transparently rewritten as
+  version 2 on the next change that modifies it — a **one-way** upgrade with no
+  downgrade path.
 - **D-2** — the `_ZJUMP_*` environment-variable prefix (vs. zoxide's `_ZO_*`).
 - **D-3** — `edit` re-sorts after every change, fixing zoxide's session-scoped
   sort-staleness quirk.
 - **D-4** — `query` rewrites the database **only when it actually changed** (a
   lazy deletion), rather than on every invocation.
 - **D-5** — no Windows `cygpath` handling; zjump is Unix-only.
+- **D-6** — zjump **adds** capabilities zoxide has no equivalent for: typed
+  entries with `query --type`, repository indexing (`index`), user-named aliases
+  (`alias`), branch checkout (`branch`), live worktree jumps, and the
+  `zw`/`zr`/`zb` shell functions. All of it is additive and opt-in; the original
+  zoxide-parity surface is unchanged. See
+  [Typed entries](#typed-entries-repos-worktrees-branches-aliases).
 
 Also out of scope: the `import` subcommand, shells other than bash/zsh, and
 edit-distance matching.

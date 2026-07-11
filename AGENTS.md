@@ -30,8 +30,10 @@
   branches, aliases) is specified in [`PLAN-GIT.md`](./PLAN-GIT.md) with live
   status in [`PROGRESS-GIT.md`](./PROGRESS-GIT.md). All its design decisions
   are final; implement it exactly as written there.
-- The five deliberate deviations from zoxide (D-1..D-5) are intentional; keep
-  them, and keep every one carrying its `D-n` ID in a code comment and README note.
+- The six deliberate deviations from zoxide (D-1..D-6) are intentional; keep
+  them, and keep every one carrying its `D-n` ID in a code comment and README
+  note. D-6 covers the typed-entry extension (repos, worktrees, branches,
+  aliases) from [`PLAN-GIT.md`](./PLAN-GIT.md), now implemented.
 
 ## Conventions
 

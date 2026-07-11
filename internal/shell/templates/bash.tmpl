@@ -132,6 +132,46 @@ function {{ .Cmd }}i() {
     __zjump_zi "$@"
 }
 
+# Jump to a git worktree of an indexed repository (interactive when given no
+# keywords, unlike `{{ .Cmd }}`). fzf Ctrl-C (exit 130) is silent through `&&`.
+\builtin unalias {{ .Cmd }}w &>/dev/null || \builtin true
+function {{ .Cmd }}w() {
+    \builtin local result
+    if [[ $# -eq 0 ]]; then
+        # shellcheck disable=SC2312
+        result="$(\command zjump query --type worktree --interactive --exclude "$PWD")" &&
+            __zjump_cd "${result}"
+    else
+        # shellcheck disable=SC2312
+        result="$(\command zjump query --type worktree --exclude "$PWD" -- "$@")" &&
+            __zjump_cd "${result}"
+    fi
+}
+
+# Jump to an indexed git repository (interactive when given no keywords).
+\builtin unalias {{ .Cmd }}r &>/dev/null || \builtin true
+function {{ .Cmd }}r() {
+    \builtin local result
+    if [[ $# -eq 0 ]]; then
+        # shellcheck disable=SC2312
+        result="$(\command zjump query --type repo --interactive --exclude "$PWD")" &&
+            __zjump_cd "${result}"
+    else
+        # shellcheck disable=SC2312
+        result="$(\command zjump query --type repo --exclude "$PWD" -- "$@")" &&
+            __zjump_cd "${result}"
+    fi
+}
+
+# Switch to a local branch of the current repository (`zjump branch` prints the
+# name; git does the switch). Echoes nothing itself.
+\builtin unalias {{ .Cmd }}b &>/dev/null || \builtin true
+function {{ .Cmd }}b() {
+    \builtin local branch
+    # shellcheck disable=SC2312
+    branch="$(\command zjump branch -- "$@")" && \command git switch "${branch}"
+}
+
 # Load completions.
 # - Bash 4.4+ is required to use `@Q`.
 # - Completions require line editing (vi or emacs mode).
