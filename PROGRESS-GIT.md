@@ -13,10 +13,10 @@ implementation started)
 | ID | Work | Status | Notes |
 |---|---|---|---|
 | R2-DB-0 | v1 fixture from current writer → `internal/db/testdata/v1.db` (FIRST commit) | done | 172B, 4 entries, 2 multibyte paths; throwaway generator removed |
-| R2-DB-1 | `Kind` type, `Dir.Kind`/`Dir.Name`, mutator kinds, `PutAlias`/`TouchAlias`, dedup keys | todo | |
-| R2-DB-2 | Format v2 serialize/deserialize, strict validation | todo | |
-| R2-DB-3 | v1 read-compat + one-way upgrade, fixture-driven tests | todo | |
-| R2-DB-4 | Alias cull/prune exemption; dir→repo upgrade rule | todo | |
+| R2-DB-1 | `Kind` type, `Dir.Kind`/`Dir.Name`, mutator kinds, `PutAlias`/`TouchAlias`, dedup keys | done | Add/AddUpdate take kind; findPath skips aliases; RemoveAlias/FindAlias added; Dedup keys on (isAlias, name/path) |
+| R2-DB-2 | Format v2 serialize/deserialize, strict validation | done | version→2; per-entry kind+name; strict bad-kind/name-mismatch/truncation rejects; `TestFormatV2*` |
+| R2-DB-3 | v1 read-compat + one-way upgrade, fixture-driven tests | done | v1 decode→KindDir/""; v2 on first dirty save; `TestV1FixtureUpgrade`, `TestLoadV1WithoutDirtyDoesNotRewrite` |
+| R2-DB-4 | Alias cull/prune exemption; dir→repo upgrade rule | done | Age rescales-but-keeps aliases; stream never deletes aliases; upgradeKind in mutators; `TestAgingSkipsAliasCull`, `TestLazyPruneSkipsAlias` |
 
 ## Phase 2 — Repo indexing
 

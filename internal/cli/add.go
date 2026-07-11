@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"zjump/internal/config"
+	"zjump/internal/db"
 	"zjump/internal/paths"
 )
 
@@ -73,7 +74,7 @@ func runAdd(args []string) error {
 			return fmt.Errorf("not a directory: %s", resolved)
 		}
 
-		database.AddUpdate(resolved, score, now)
+		database.AddUpdate(resolved, score, now, db.KindDir)
 	}
 
 	// Aging runs only if something actually changed (R-ADD-8).

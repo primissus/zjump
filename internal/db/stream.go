@@ -100,12 +100,16 @@ func (s *Stream) Next() *Dir {
 			continue
 		}
 		if !s.filterByExclude(dir.Path) {
-			s.db.swapRemove(idx)
+			// Aliases are exempt from lazy deletion — deleted only by
+			// `alias rm` (§2, R2-DB-4) — so skip without removing.
+			if !dir.IsAlias() {
+				s.db.swapRemove(idx)
+			}
 			continue
 		}
 		// Existence is the slowest check, so it goes last.
 		if !s.filterByExists(dir.Path) {
-			if dir.LastAccessed < s.opts.ttl {
+			if dir.LastAccessed < s.opts.ttl && !dir.IsAlias() {
 				s.db.swapRemove(idx)
 			}
 			continue

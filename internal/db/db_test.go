@@ -18,8 +18,8 @@ func TestAddRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		db.AddUpdate(path, 1.0, testEpoch)
-		db.AddUpdate(path, 1.0, testEpoch)
+		db.AddUpdate(path, 1.0, testEpoch, KindDir)
+		db.AddUpdate(path, 1.0, testEpoch, KindDir)
 		if err := db.Save(); err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +51,7 @@ func TestRemoveRoundTrip(t *testing.T) {
 	const path = "/foo/bar"
 
 	db, _ := OpenDir(dir)
-	db.AddUpdate(path, 1.0, testEpoch)
+	db.AddUpdate(path, 1.0, testEpoch, KindDir)
 	if err := db.Save(); err != nil {
 		t.Fatal(err)
 	}
@@ -77,9 +77,9 @@ func TestRemoveRoundTrip(t *testing.T) {
 // AddUpdate refreshes it (R-EDIT-2 vs R-ADD-1).
 func TestAddVsAddUpdate(t *testing.T) {
 	db, _ := OpenDir(t.TempDir())
-	db.AddUpdate("/p", 1.0, 100)
+	db.AddUpdate("/p", 1.0, 100, KindDir)
 
-	db.Add("/p", 1.0, 200) // rank +1, last_accessed unchanged
+	db.Add("/p", 1.0, 200, KindDir) // rank +1, last_accessed unchanged
 	d := db.Dirs()[0]
 	if d.LastAccessed != 100 {
 		t.Errorf("Add touched last_accessed: got %d, want 100", d.LastAccessed)
@@ -88,7 +88,7 @@ func TestAddVsAddUpdate(t *testing.T) {
 		t.Errorf("rank = %v, want 2.0", d.Rank)
 	}
 
-	db.AddUpdate("/p", 1.0, 300) // rank +1, last_accessed -> 300
+	db.AddUpdate("/p", 1.0, 300, KindDir) // rank +1, last_accessed -> 300
 	d = db.Dirs()[0]
 	if d.LastAccessed != 300 {
 		t.Errorf("AddUpdate did not refresh last_accessed: got %d, want 300", d.LastAccessed)
@@ -98,8 +98,8 @@ func TestAddVsAddUpdate(t *testing.T) {
 // TestRankFloor: rank never goes negative on Add/AddUpdate (R-ADD-1, R-EDIT-2).
 func TestRankFloor(t *testing.T) {
 	db, _ := OpenDir(t.TempDir())
-	db.AddUpdate("/p", 1.0, 100)
-	db.Add("/p", -5.0, 200) // 1 - 5 = -4 -> floored to 0
+	db.AddUpdate("/p", 1.0, 100, KindDir)
+	db.Add("/p", -5.0, 200, KindDir) // 1 - 5 = -4 -> floored to 0
 	if r := db.Dirs()[0].Rank; r != 0.0 {
 		t.Errorf("rank = %v, want 0.0 (floored)", r)
 	}
@@ -109,8 +109,8 @@ func TestRankFloor(t *testing.T) {
 // 0.9*maxAge/total, dropping post-scale ranks below 1.0.
 func TestAge(t *testing.T) {
 	db, _ := OpenDir(t.TempDir())
-	db.AddUpdate("/keep", 100.0, testEpoch)
-	db.AddUpdate("/drop", 2.0, testEpoch)
+	db.AddUpdate("/keep", 100.0, testEpoch, KindDir)
+	db.AddUpdate("/drop", 2.0, testEpoch, KindDir)
 	// total = 102 > 50; factor = 0.9*50/102 = 0.44117...
 	// /keep -> 44.12 (kept); /drop -> 0.882 (<1, pruned)
 	db.Age(50.0)
@@ -131,8 +131,8 @@ func TestAge(t *testing.T) {
 // TestAgeNoTrigger: total <= maxAge is a no-op.
 func TestAgeNoTrigger(t *testing.T) {
 	db, _ := OpenDir(t.TempDir())
-	db.AddUpdate("/a", 5.0, testEpoch)
-	db.AddUpdate("/b", 5.0, testEpoch)
+	db.AddUpdate("/a", 5.0, testEpoch, KindDir)
+	db.AddUpdate("/b", 5.0, testEpoch, KindDir)
 	db.Age(10000.0)
 	if len(db.Dirs()) != 2 {
 		t.Errorf("aging should be a no-op below the ceiling; got %d entries", len(db.Dirs()))
@@ -174,8 +174,8 @@ func TestDedup(t *testing.T) {
 // so a query that only reorders performs no rewrite.
 func TestSortDoesNotDirty(t *testing.T) {
 	db, _ := OpenDir(t.TempDir())
-	db.AddUpdate("/a", 1.0, 100)
-	db.AddUpdate("/b", 2.0, 100)
+	db.AddUpdate("/a", 1.0, 100, KindDir)
+	db.AddUpdate("/b", 2.0, 100, KindDir)
 	db.Save() // clears dirty
 	if db.Dirty() {
 		t.Fatal("db should be clean after save")
