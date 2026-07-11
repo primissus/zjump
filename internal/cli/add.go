@@ -8,6 +8,7 @@ import (
 
 	"zjump/internal/config"
 	"zjump/internal/db"
+	"zjump/internal/gitx"
 	"zjump/internal/paths"
 )
 
@@ -74,7 +75,14 @@ func runAdd(args []string) error {
 			return fmt.Errorf("not a directory: %s", resolved)
 		}
 
-		database.AddUpdate(resolved, score, now, db.KindDir)
+		// Auto-type repo roots (G-4, R2-IDX-2): a path with a .git dir/file
+		// becomes KindRepo; the mutator upgrades an existing dir entry in place
+		// and never downgrades a repo (D-6).
+		kind := db.KindDir
+		if gitx.IsRepoRoot(resolved) {
+			kind = db.KindRepo
+		}
+		database.AddUpdate(resolved, score, now, kind)
 	}
 
 	// Aging runs only if something actually changed (R-ADD-8).

@@ -85,11 +85,16 @@ func editInteractive(database *db.Database, now db.Epoch) error {
 	return err
 }
 
-// dumpEntries writes every entry as a "score\tpath\0" record, best-first, for
-// fzf's next candidate list (R-EDIT-2).
+// dumpEntries writes every dir/repo entry as a "score\tpath\0" record,
+// best-first, for fzf's next candidate list (R-EDIT-2). Aliases are filtered out
+// so the edit UI never lists them and its delete/increment/decrement path
+// arguments can never collide with an alias (§3, R2-IDX-2).
 func dumpEntries(database *db.Database, now db.Epoch) error {
 	dirs := database.Dirs()
 	for i := len(dirs) - 1; i >= 0; i-- {
+		if dirs[i].IsAlias() {
+			continue
+		}
 		rec := dirs[i].DisplayScore(now, "\t") + "\x00"
 		if _, werr := fmt.Fprint(os.Stdout, rec); werr != nil {
 			return errs.PipeExit(werr, "fzf")

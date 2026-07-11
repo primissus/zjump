@@ -22,9 +22,9 @@ implementation started)
 
 | ID | Work | Status | Notes |
 |---|---|---|---|
-| R2-IDX-1 | `internal/gitx` repo-root detection (`.git` dir or file) | todo | |
-| R2-IDX-2 | `add` auto-typing to repo; `edit` dump omits aliases | todo | |
-| R2-IDX-3 | `zjump index` command (walk/skip rules, upsert, summary) | todo | |
+| R2-IDX-1 | `internal/gitx` repo-root detection (`.git` dir or file) | done | single Lstat, no subprocess; symlink `.git` rejected; `TestRepoRootDetectsGitDirAndGitFile` |
+| R2-IDX-2 | `add` auto-typing to repo; `edit` dump omits aliases | done | `add` sets KindRepo via gitx; dumpEntries skips aliases; `TestAddUpgradesDirToRepo`, `TestAddNeverDowngradesRepo`, `TestEditReloadOmitsAliases` |
+| R2-IDX-3 | `zjump index` command (walk/skip rules, upsert, summary) | done | depth/hidden/symlink/no-descent/exclude rules; aging+single save; stderr summary; `TestIndexWalk*`, `TestIndexRespectsExcludeGlobs` |
 
 ## Phase 3 — `--type` query surface
 

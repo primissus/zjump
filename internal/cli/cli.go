@@ -38,6 +38,8 @@ func Run(args []string) error {
 		return runInit(args[1:])
 	case "edit":
 		return runEdit(args[1:])
+	case "index":
+		return runIndex(args[1:])
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return nil
@@ -118,6 +120,7 @@ Commands:
     remove [paths]...          Remove directories from the database
     init <bash|zsh>            Print the shell integration script
     edit                       Interactively browse/edit the database (needs fzf)
+    index <roots>...           Scan roots for git repositories and index them
 
 Run 'zjump <COMMAND> --help' for command-specific options.
 
