@@ -45,6 +45,18 @@ func matchKeywords(keywords []string, path string) bool {
 	return true
 }
 
+// MatchPath reports whether target matches keywords with the standard
+// right-to-left substring matcher, lowercasing the keywords first exactly as the
+// stream does. Exposed for the worktree pipeline, which matches keywords against
+// worktree paths outside the DB stream (§6, R2-WT-2).
+func MatchPath(keywords []string, target string) bool {
+	lowered := make([]string, len(keywords))
+	for i, k := range keywords {
+		lowered[i] = toLower(k)
+	}
+	return matchKeywords(lowered, target)
+}
+
 // containsSeparator reports whether s contains a path separator. Unix-only
 // (N-4): the separator is '/'. Mirrors path::is_separator on Unix.
 func containsSeparator(s string) bool {

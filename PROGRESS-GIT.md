@@ -46,9 +46,9 @@ implementation started)
 
 | ID | Work | Status | Notes |
 |---|---|---|---|
-| R2-WT-1 | `gitx` porcelain runner/parser + branch listing helpers | todo | |
-| R2-WT-2 | `--type worktree` pipeline (lazy, dedup, 50-repo cap, 3-field records) | todo | |
-| R2-BR-1 | `zjump branch` (marker field, fast path, fzf exit codes) | todo | |
+| R2-WT-1 | `gitx` porcelain runner/parser + branch listing helpers | done | WorktreeList/ParsePorcelain (bare/detached/locked/prunable); InsideWorkTree/LocalBranches/CurrentBranch; `TestPorcelainParser` |
+| R2-WT-2 | `--type worktree` pipeline (lazy, dedup, 50-repo cap, 3-field records) | done | lazy repo stream, keyword-on-worktree-path, cross-repo dedup, cap 50, 3-field fzf record (field-2 select); `TestWorktreeDedupAcrossRepos/RepoCapAt50/GitFailureSkipsRepoSilently/FirstAndExclude`, *(shell)* `TestWorktreeEndToEnd` |
+| R2-BR-1 | `zjump branch` (marker field, fast path, fzf exit codes) | done | inside-repo check, list, current-first+marker, single-match fast path, fzf field-2, silent 130 via shared classifyExit; `TestBranch*` unit, *(shell)* `TestBranchEndToEnd` |
 
 ## Phase 6 — Shell & docs
 

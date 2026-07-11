@@ -42,6 +42,8 @@ func Run(args []string) error {
 		return runIndex(args[1:])
 	case "alias":
 		return runAlias(args[1:])
+	case "branch":
+		return runBranch(args[1:])
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return nil
@@ -124,6 +126,7 @@ Commands:
     edit                       Interactively browse/edit the database (needs fzf)
     index <roots>...           Scan roots for git repositories and index them
     alias add|rm|list          Manage user-named shortcuts that resolve to paths
+    branch [pattern]           Pick a local branch of the current repo (prints it)
 
 Run 'zjump <COMMAND> --help' for command-specific options.
 
