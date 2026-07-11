@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"zjump/internal/config"
 	"zjump/internal/db"
@@ -27,9 +28,12 @@ func runQuery(args []string) error {
 	fs.BoolVar(&list, "list", false, "")
 	fs.BoolVar(&score, "s", false, "")
 	fs.BoolVar(&score, "score", false, "")
-	var exclude, baseDir string
+	var exclude, baseDir, typ string
 	fs.StringVar(&exclude, "exclude", "", "")
 	fs.StringVar(&baseDir, "base-dir", "", "")
+	// --type selects the candidate set (D-6): dir|repo|worktree|alias|any, or
+	// (omitted) for the default dir+repo behavior plus the alias fast path (§5.1).
+	fs.StringVar(&typ, "type", "", "")
 
 	keywords, err := parseArgs(fs, args)
 	if err != nil {
@@ -41,6 +45,9 @@ func runQuery(args []string) error {
 
 	if interactive && list {
 		return fmt.Errorf("the argument '--interactive' cannot be used with '--list'")
+	}
+	if err := validateType(typ); err != nil {
+		return err
 	}
 
 	database, err := openDB()
@@ -58,6 +65,7 @@ func runQuery(args []string) error {
 		excludeSet:  set["exclude"],
 		baseDir:     baseDir,
 		baseDirSet:  set["base-dir"],
+		typ:         typ,
 	}
 
 	qErr := doQuery(database, p)
@@ -78,6 +86,34 @@ type queryParams struct {
 	excludeSet  bool
 	baseDir     string
 	baseDirSet  bool
+	typ         string // "", "dir", "repo", "worktree", "alias", "any"
+}
+
+// validateType rejects an unknown --type value (§5.1, R2-TYPE-1).
+func validateType(typ string) error {
+	switch typ {
+	case "", "dir", "repo", "worktree", "alias", "any":
+		return nil
+	default:
+		return fmt.Errorf("invalid type: %s", typ)
+	}
+}
+
+// kindsForType maps a --type value to the DB kinds it selects. Worktree is not
+// a stored kind — it is enumerated live (§6) — so it never reaches here.
+func kindsForType(typ string) []db.Kind {
+	switch typ {
+	case "dir":
+		return []db.Kind{db.KindDir}
+	case "repo":
+		return []db.Kind{db.KindRepo}
+	case "alias":
+		return []db.Kind{db.KindAlias}
+	case "any":
+		return []db.Kind{db.KindDir, db.KindRepo, db.KindAlias}
+	default: // "" => today's default candidate set (G-5)
+		return []db.Kind{db.KindDir, db.KindRepo}
+	}
 }
 
 func doQuery(database *db.Database, p queryParams) error {
@@ -85,14 +121,35 @@ func doQuery(database *db.Database, p queryParams) error {
 	if err != nil {
 		return err
 	}
+
+	// --type worktree is a live git enumeration, not a DB query (§6, R2-WT-2).
+	if p.typ == "worktree" {
+		return queryWorktree(database, p, now)
+	}
+
 	excludeGlobs, err := config.ExcludeDirs()
 	if err != nil {
 		return err
 	}
 
+	var excl *string
+	if p.excludeSet {
+		excl = &p.exclude
+	}
+
+	// Alias fast path (§5.2, D-6): default mode only (no --type, not -l/-i) with
+	// exactly one keyword. A hit prints the target and returns; otherwise we fall
+	// through to the normal dir+repo match stream (G-8).
+	if p.typ == "" && !p.list && !p.interactive && len(p.keywords) == 1 {
+		if handled, err := aliasFastPath(database, p, now, excl); handled || err != nil {
+			return err
+		}
+	}
+
 	opts := db.NewStreamOptions(now).
 		WithKeywords(p.keywords).
-		WithExclude(excludeGlobs)
+		WithExclude(excludeGlobs).
+		WithKinds(kindsForType(p.typ)...)
 	if p.baseDirSet {
 		opts = opts.WithBaseDir(&p.baseDir)
 	}
@@ -102,11 +159,6 @@ func doQuery(database *db.Database, p queryParams) error {
 
 	stream := db.NewStream(database, opts)
 
-	var excl *string
-	if p.excludeSet {
-		excl = &p.exclude
-	}
-
 	switch {
 	case p.interactive:
 		return queryInteractive(stream, now, p.score, excl)
@@ -115,6 +167,58 @@ func doQuery(database *db.Database, p queryParams) error {
 	default:
 		return queryFirst(stream, now, p.score, excl)
 	}
+}
+
+// aliasFastPath implements §5.2 (G-6/G-7/G-8). It returns handled=true when it
+// resolved and printed an alias target (after bumping its rank), or false to
+// fall through to normal keyword matching.
+//
+// Candidate collection follows the spec's exact-XOR-prefix rule: if an alias
+// name equals the keyword, the candidate set is that single alias; otherwise it
+// is every name-prefix alias. Candidates whose target equals --exclude are
+// dropped; if the set empties, we fall through (G-8).
+func aliasFastPath(database *db.Database, p queryParams, now db.Epoch, excl *string) (bool, error) {
+	keyword := p.keywords[0]
+	dirs := database.Dirs()
+
+	excluded := func(d *db.Dir) bool { return excl != nil && d.Path == *excl }
+
+	var winner *db.Dir
+	if exact := database.FindAlias(keyword); exact != nil {
+		// Exact name match: the candidate set is just this alias.
+		if !excluded(exact) {
+			winner = exact
+		}
+	} else {
+		// No exact match: best-scoring surviving prefix candidate wins; ties
+		// break by lexicographically smaller name for determinism.
+		for i := range dirs {
+			d := &dirs[i]
+			if !d.IsAlias() || !strings.HasPrefix(d.Name, keyword) || excluded(d) {
+				continue
+			}
+			if winner == nil || betterAlias(d, winner, now) {
+				winner = d
+			}
+		}
+	}
+	if winner == nil {
+		return false, nil // fall through
+	}
+
+	database.TouchAlias(winner.Name, now) // G-6: rank += 1, last_accessed = now
+	_, werr := fmt.Fprintln(os.Stdout, formatDir(winner, now, p.score))
+	return true, errs.PipeExit(werr, "stdout")
+}
+
+// betterAlias reports whether a outranks b: higher decayed score first, then
+// lexicographically smaller name (§5.2 step 3).
+func betterAlias(a, b *db.Dir, now db.Epoch) bool {
+	sa, sb := a.Score(now), b.Score(now)
+	if sa != sb {
+		return sa > sb
+	}
+	return a.Name < b.Name
 }
 
 func formatDir(dir *db.Dir, now db.Epoch, score bool) string {

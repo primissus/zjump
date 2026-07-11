@@ -16,6 +16,7 @@ type StreamOptions struct {
 	resolveSymlinks bool
 	ttl             Epoch
 	baseDir         *string
+	kinds           []Kind // nil => every kind is a candidate
 }
 
 // NewStreamOptions returns options with the lazy-deletion TTL defaulted to
@@ -63,6 +64,26 @@ func (o StreamOptions) WithBaseDir(baseDir *string) StreamOptions {
 	return o
 }
 
+// WithKinds restricts the candidate set to the given kinds (§5.1, R2-TYPE-2).
+// Passing no kinds leaves every kind eligible (the pre-typed-entries default),
+// which keeps existing stream tests behaving unchanged (G-5).
+func (o StreamOptions) WithKinds(kinds ...Kind) StreamOptions {
+	o.kinds = kinds
+	return o
+}
+
+func (o *StreamOptions) allowsKind(k Kind) bool {
+	if len(o.kinds) == 0 {
+		return true
+	}
+	for _, allowed := range o.kinds {
+		if allowed == k {
+			return true
+		}
+	}
+	return false
+}
+
 // Stream yields matching directories best-first. It sorts the database by score
 // on construction, then walks indices in reverse. Non-matches are skipped;
 // excluded and stale-nonexistent entries are lazily removed from the DB as a
@@ -93,7 +114,13 @@ func (s *Stream) Next() *Dir {
 		}
 		dir := &s.db.dirs[idx]
 
-		if !matchKeywords(s.opts.keywords, dir.Path) {
+		if !s.opts.allowsKind(dir.Kind) {
+			continue
+		}
+		// Keywords match the alias NAME (a single component) but the PATH for
+		// dir/repo entries (§5.1). All other filters operate on the path, which
+		// for an alias is its target.
+		if !matchKeywords(s.opts.keywords, s.matchField(dir)) {
 			continue
 		}
 		if !s.filterByBaseDir(dir.Path) {
@@ -107,9 +134,11 @@ func (s *Stream) Next() *Dir {
 			}
 			continue
 		}
-		// Existence is the slowest check, so it goes last.
-		if !s.filterByExists(dir.Path) {
-			if dir.LastAccessed < s.opts.ttl && !dir.IsAlias() {
+		// Existence is the slowest check, so it goes last. Aliases are never
+		// existence-filtered — a user shortcut always shows, which is also why
+		// --all is a no-op for them (§5.1).
+		if !dir.IsAlias() && !s.filterByExists(dir.Path) {
+			if dir.LastAccessed < s.opts.ttl {
 				s.db.swapRemove(idx)
 			}
 			continue
@@ -117,6 +146,15 @@ func (s *Stream) Next() *Dir {
 		return &s.db.dirs[idx]
 	}
 	return nil
+}
+
+// matchField returns the string keywords are matched against for an entry: an
+// alias matches on its name, everything else on its path (§5.1).
+func (s *Stream) matchField(dir *Dir) string {
+	if dir.IsAlias() {
+		return dir.Name
+	}
+	return dir.Path
 }
 
 func (s *Stream) filterByBaseDir(path string) bool {

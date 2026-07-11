@@ -30,10 +30,10 @@ implementation started)
 
 | ID | Work | Status | Notes |
 |---|---|---|---|
-| R2-TYPE-1 | `--type` flag parsing/validation on `query` | todo | |
-| R2-TYPE-2 | Kind filtering; default = dir+repo; `any`; existing tests unmodified | todo | |
-| R2-TYPE-3 | `--type alias` name-matching mode | todo | |
-| R2-TYPE-4 | Alias fast path (exact > prefix-by-score, exclude fallthrough, rank bump) | todo | |
+| R2-TYPE-1 | `--type` flag parsing/validation on `query` | done | validateType; `invalid type: {v}`; worktree accepted, enumeration deferred to Phase 5 |
+| R2-TYPE-2 | Kind filtering; default = dir+repo; `any`; existing tests unmodified | done | StreamOptions.WithKinds; default dir+repo; existing query/e2e tests pass unmodified (G-5); `TestQueryTypeFilter` |
+| R2-TYPE-3 | `--type alias` name-matching mode | done | stream matches alias on Name, outputs target path; existence-exempt; `TestQueryTypeFilter` alias case |
+| R2-TYPE-4 | Alias fast path (exact > prefix-by-score, exclude fallthrough, rank bump) | done | aliasFastPath; exact-XOR-prefix; TouchAlias+save; `TestAliasFastPath*` (7 tests) |
 
 ## Phase 4 — Aliases
 
