@@ -39,8 +39,8 @@ implementation started)
 
 | ID | Work | Status | Notes |
 |---|---|---|---|
-| R2-AL-1 | `zjump alias add/rm/list`, name validation, replace-on-re-add | todo | |
-| R2-AL-2 | `remove` cannot touch aliases (guarantee + tests) | todo | |
+| R2-AL-1 | `zjump alias add/rm/list`, name validation, replace-on-re-add | done | validateAliasName; add resolves like `add`; rm not-found error; list best-score-first, no target dedup, `--score` col; `TestAliasNameValidation`, `TestAliasReplaceKeepsRank`, `TestAliasRm`, `TestAliasListOrderAndNoTargetDedup` |
+| R2-AL-2 | `remove` cannot touch aliases (guarantee + tests) | done | Remove skips aliases (Phase 1); `TestRemoveCannotDeleteAlias` |
 
 ## Phase 5 — Worktrees & branches
 

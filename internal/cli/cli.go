@@ -40,6 +40,8 @@ func Run(args []string) error {
 		return runEdit(args[1:])
 	case "index":
 		return runIndex(args[1:])
+	case "alias":
+		return runAlias(args[1:])
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return nil
@@ -121,6 +123,7 @@ Commands:
     init <bash|zsh>            Print the shell integration script
     edit                       Interactively browse/edit the database (needs fzf)
     index <roots>...           Scan roots for git repositories and index them
+    alias add|rm|list          Manage user-named shortcuts that resolve to paths
 
 Run 'zjump <COMMAND> --help' for command-specific options.
 
