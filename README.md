@@ -16,9 +16,11 @@ zjump works on **bash** and **zsh** (Linux and macOS).
 [How it works](#how-it-works)
 
 > **Scope.** zjump implements broad behavioral parity with zoxide for the
-> `add`, `query`, `remove`, `init`, and `edit` commands. The `import` command,
-> shells other than bash/zsh, and Windows are **out of scope**; the database is
-> a zjump-native format, not byte-compatible with zoxide's `db.zo`. See
+> `add`, `query`, `remove`, `init`, and `edit` commands. It also extends beyond
+> zoxide with directory aliases, git branch jumps, and git worktree jumps.
+> The `import` command, shells other than bash/zsh, and Windows are
+> **out of scope**; the database is a zjump-native format, not byte-compatible
+> with zoxide's `db.zo`. See
 > [Deliberate deviations](#deliberate-deviations-from-zoxide).
 
 ## Getting started
@@ -36,6 +38,11 @@ z -                # cd into the previous directory
 zi foo             # cd with interactive selection (using fzf)
 
 z foo<SPACE><TAB>  # show interactive completions (bash 4.4+/zsh only)
+
+z -a proj ~/src/proj  # create an alias 'proj' → ~/src/proj
+z proj                # jump to the alias target (aliases beat frecency)
+z -b main myrepo      # jump to the worktree where 'main' is checked out
+z -w api myrepo       # jump to a worktree by name (e.g. directory named 'api')
 ```
 
 The `z` command tracks directories as you visit them and ranks them by
@@ -178,6 +185,36 @@ inspect and adjust entries. Key bindings:
 
 > `edit` re-sorts the list after every change, so the ordering never goes stale
 > mid-session (see [deviations](#deliberate-deviations-from-zoxide)).
+
+### `zjump alias [<name> <dir>]`
+
+Manage named directory shortcuts (aliases) that live outside the frecency
+database.
+
+- `zjump alias` — list all aliases (one per line, `name<TAB>path`, sorted by name).
+- `zjump alias <name> <dir>` — create or overwrite an alias. `dir` must be an
+  existing directory. Names cannot contain `/` or start with `-`.
+- `zjump alias -d|--delete <name>` — remove an alias.
+
+Aliases are stored in `<data-dir>/aliases` — a separate versioned binary file
+with the same crash-safe atomic writes as the database.
+
+When `z <name>` matches an alias (case-sensitive, single keyword, default mode),
+the alias target is used directly — no frecency lookup. Multi-keyword queries
+and `--list`/`--interactive` modes bypass alias resolution.
+
+### `zjump branch <branch> [repo-keywords...]`
+
+Print the worktree path (including the main checkout) where `<branch>` is
+checked out. When `[repo-keywords]` are given, they are matched against the
+frecency database to locate the repository; otherwise the current working
+directory's repository is used. Never creates worktrees — read-only.
+
+### `zjump worktree <name> [repo-keywords...]`
+
+Print a worktree path matching `<name>` by directory basename first, then by
+branch shortname. Multiple matches produce an ambiguity error. Repository
+resolution works the same as `branch`.<
 
 ## Configuration
 

@@ -38,6 +38,12 @@ func Run(args []string) error {
 		return runInit(args[1:])
 	case "edit":
 		return runEdit(args[1:])
+	case "alias":
+		return runAlias(args[1:])
+	case "branch":
+		return runBranch(args[1:])
+	case "worktree":
+		return runWorktree(args[1:])
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return nil
@@ -118,6 +124,9 @@ Commands:
     remove [paths]...          Remove directories from the database
     init <bash|zsh>            Print the shell integration script
     edit                       Interactively browse/edit the database (needs fzf)
+    alias [<name> <dir>]      List, create, or delete directory aliases
+    branch <name> [repo...]   Print the worktree path for a checked-out branch
+    worktree <name> [repo...] Print a worktree path by name or branch
 
 Run 'zjump <COMMAND> --help' for command-specific options.
 

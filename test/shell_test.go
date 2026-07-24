@@ -188,3 +188,159 @@ func TestQueryInteractiveFilter(t *testing.T) {
 		t.Errorf("query -i no-match: code=%d stderr=%q", r.code, r.stderr)
 	}
 }
+
+// TestFlagsInShellTemplate verifies the generated z function dispatches the
+// -a/--alias, -b/--branch, and -w/--worktree flags to the correct subcommands.
+func TestFlagsInShellTemplate(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh"} {
+		requireBin(t, shell)
+		data := t.TempDir()
+		root := t.TempDir()
+		target := filepath.Join(root, "aliastarget")
+		os.MkdirAll(target, 0o755)
+
+		script := `
+eval "$(zjump init ` + shell + ` --hook none)"
+z -a proj "` + target + `"
+z proj >/dev/null 2>&1; echo "alias_jump=$(pwd)"
+`
+		out, code := execScript(t, shell, script, []string{"_ZJUMP_DATA_DIR=" + data})
+		if code != 0 {
+			t.Fatalf("%s: script failed: %s", shell, out)
+		}
+		lines := map[string]string{}
+		for _, ln := range strings.Split(strings.TrimSpace(out), "\n") {
+			if k, v, ok := strings.Cut(ln, "="); ok {
+				lines[k] = v
+			}
+		}
+		if lines["alias_jump"] != target {
+			t.Errorf("%s: z proj (alias) = %q, want %q", shell, lines["alias_jump"], target)
+		}
+	}
+}
+
+// requireBin is defined above; add runIn for directory-aware exec.  
+// runIn executes zjump with args under the given working directory.
+func runIn(t *testing.T, dataDir, wd string, extraEnv []string, args ...string) result {
+	t.Helper()
+	cmd := exec.Command(zjumpBin, args...)
+	cmd.Env = append(os.Environ(), "_ZJUMP_DATA_DIR="+dataDir)
+	cmd.Env = append(cmd.Env, extraEnv...)
+	cmd.Dir = wd
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	code := 0
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else {
+			t.Fatalf("run(%v): %v", args, err)
+		}
+	}
+	return result{stdout.String(), stderr.String(), code}
+}
+
+// TestGitBranchWorktree tests zjump branch and worktree against a real git repo.
+func TestGitBranchWorktree(t *testing.T) {
+	requireBin(t, "git")
+	data := t.TempDir()
+	base := t.TempDir()
+
+	mustGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %s\n%s", args, err, out)
+		}
+	}
+
+	// Create a normal repo with a main branch.
+	mainWT := filepath.Join(base, "main")
+	os.MkdirAll(mainWT, 0o755)
+	mustGit("-C", mainWT, "init", "-b", "main")
+	mustGit("-C", mainWT, "config", "user.email", "test@test.local")
+	mustGit("-C", mainWT, "config", "user.name", "Test")
+	mustGit("-C", mainWT, "commit", "--allow-empty", "-m", "init")
+
+	// Add a feature worktree off the main repo.
+	featWT := filepath.Join(base, "feature-x")
+	mustGit("-C", mainWT, "worktree", "add", featWT, "-b", "feature/x")
+	mustGit("-C", featWT, "commit", "--allow-empty", "-m", "feat")
+
+	// Resolve symlinks so path comparisons are stable on macOS (/var vs /private/var).
+	resolve := func(p string) string {
+		r, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			t.Fatalf("resolve %s: %v", p, err)
+		}
+		return r
+	}
+	mainResolved := resolve(mainWT)
+	featResolved := resolve(featWT)
+
+	// Add repo paths to DB for indexed repo resolution.
+	run(t, data, nil, "add", mainResolved)
+	run(t, data, nil, "add", featResolved)
+
+	// Test `zjump branch main` from the mainWT directory (resolves via CWD).
+	r := runIn(t, data, mainWT, nil, "branch", "main")
+	if r.code != 0 {
+		t.Fatalf("branch main: %s", r.stderr)
+	}
+	got := strings.TrimSpace(r.stdout)
+	if got != mainResolved {
+		t.Errorf("branch main = %q, want %q", got, mainResolved)
+	}
+
+	// Test `zjump branch feature/x` from mainWT (both worktrees share repo).
+	r = runIn(t, data, mainWT, nil, "branch", "feature/x")
+	if r.code != 0 {
+		t.Fatalf("branch feature/x: %s", r.stderr)
+	}
+	got = strings.TrimSpace(r.stdout)
+	if got != featResolved {
+		t.Errorf("branch feature/x = %q, want %q", got, featResolved)
+	}
+
+	// Test branch miss — error with hint.
+	r = run(t, data, nil, "branch", "nonexistent")
+	if r.code == 0 {
+		t.Error("branch nonexistent should error")
+	}
+	if !strings.Contains(r.stderr, "branch not checked out") {
+		t.Errorf("branch miss error = %q", r.stderr)
+	}
+
+	// Test `zjump worktree feature-x` (by basename) from mainWT.
+	r = runIn(t, data, mainWT, nil, "worktree", "feature-x")
+	if r.code != 0 {
+		t.Fatalf("worktree feature-x: %s", r.stderr)
+	}
+	got = strings.TrimSpace(r.stdout)
+	if got != featResolved {
+		t.Errorf("worktree feature-x = %q, want %q", got, featResolved)
+	}
+
+	// Test `zjump worktree main` (by basename).
+	r = runIn(t, data, mainWT, nil, "worktree", "main")
+	if r.code != 0 {
+		t.Fatalf("worktree main: %s", r.stderr)
+	}
+	got = strings.TrimSpace(r.stdout)
+	if got != mainResolved {
+		t.Errorf("worktree main = %q, want %q", got, mainResolved)
+	}
+
+	// Test worktree miss — error with hint.
+	r = run(t, data, nil, "worktree", "missing")
+	if r.code == 0 {
+		t.Error("worktree missing should error")
+	}
+	if !strings.Contains(r.stderr, "no worktree found") {
+		t.Errorf("worktree miss error = %q", r.stderr)
+	}
+}

@@ -1,6 +1,6 @@
 //go:build unix
 
-package db
+package atomic
 
 import (
 	"os"

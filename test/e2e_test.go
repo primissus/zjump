@@ -282,3 +282,134 @@ func TestBrokenPipe(t *testing.T) {
 		t.Error("expected at least one line from head")
 	}
 }
+
+func TestAliasCreateListDelete(t *testing.T) {
+	data := t.TempDir()
+	target := filepath.Join(t.TempDir(), "myproj")
+	os.MkdirAll(target, 0o755)
+
+	// Create.
+	r := run(t, data, nil, "alias", "proj", target)
+	if r.code != 0 {
+		t.Fatalf("alias create failed: %s", r.stderr)
+	}
+
+	// List.
+	list := run(t, data, nil, "alias").stdout
+	if !strings.Contains(list, "proj\t") || !strings.Contains(list, target) {
+		t.Errorf("alias list missing entry:\n%s", list)
+	}
+
+	// Delete.
+	r = run(t, data, nil, "alias", "-d", "proj")
+	if r.code != 0 {
+		t.Fatalf("alias delete failed: %s", r.stderr)
+	}
+
+	// List should now be empty.
+	list = run(t, data, nil, "alias").stdout
+	if strings.Contains(list, target) {
+		t.Errorf("alias list still shows deleted entry:\n%s", list)
+	}
+
+	// Delete nonexistent.
+	r = run(t, data, nil, "alias", "-d", "proj")
+	if r.code == 0 || !strings.Contains(r.stderr, "alias not found") {
+		t.Errorf("delete nonexistent: code=%d stderr=%q", r.code, r.stderr)
+	}
+}
+
+func TestAliasRejectsInvalidName(t *testing.T) {
+	data := t.TempDir()
+	target := filepath.Join(t.TempDir(), "target")
+	os.MkdirAll(target, 0o755)
+
+	for _, name := range []string{"", ".", "..", "-bad", "x/y", "a\nb"} {
+		r := run(t, data, nil, "alias", name, target)
+		if r.code == 0 {
+			t.Errorf("alias %q should be rejected", name)
+		}
+	}
+}
+
+func TestAliasRejectsNotADirectory(t *testing.T) {
+	data := t.TempDir()
+	f := filepath.Join(t.TempDir(), "afile")
+	os.WriteFile(f, []byte("x"), 0o644)
+
+	r := run(t, data, nil, "alias", "key", f)
+	if r.code == 0 || !strings.Contains(r.stderr, "not a directory") {
+		t.Errorf("alias with file target: code=%d stderr=%q", r.code, r.stderr)
+	}
+}
+
+func TestAliasQueryResolution(t *testing.T) {
+	data := t.TempDir()
+	aliasTarget := filepath.Join(t.TempDir(), "aliastarget")
+	frecTarget := filepath.Join(t.TempDir(), "frecdir")
+	os.MkdirAll(aliasTarget, 0o755)
+	os.MkdirAll(frecTarget, 0o755)
+
+	// Set up: alias "foo" -> aliastarget, frecency entry "foo/bar" -> /frecdir/foo/bar
+	run(t, data, nil, "alias", "foo", aliasTarget)
+	frecPath := filepath.Join(frecTarget, "foo", "bar")
+	os.MkdirAll(frecPath, 0o755)
+	run(t, data, nil, "add", frecPath)
+
+	// Query "foo" alone: alias wins.
+	out := strings.TrimSpace(run(t, data, nil, "query", "foo").stdout)
+	if out != aliasTarget {
+		t.Errorf("alias query = %q, want %q", out, aliasTarget)
+	}
+
+	// Query "foo" "bar" (2 keywords): no alias match, falls through to frecency.
+	out = strings.TrimSpace(run(t, data, nil, "query", "foo", "bar").stdout)
+	if out != frecPath {
+		t.Errorf("multi-keyword query = %q, want %q", out, frecPath)
+	}
+}
+
+func TestAliasDanglingTargetError(t *testing.T) {
+	data := t.TempDir()
+	target := filepath.Join(t.TempDir(), "willvanish")
+	os.MkdirAll(target, 0o755)
+	run(t, data, nil, "alias", "lost", target)
+	os.RemoveAll(target)
+
+	r := run(t, data, nil, "query", "lost")
+	if r.code == 0 {
+		t.Error("dangling alias should error")
+	}
+	if !strings.Contains(r.stderr, "no longer exists") {
+		t.Errorf("dangling alias error = %q", r.stderr)
+	}
+}
+
+func TestAliasAlreadyInOnlyMatch(t *testing.T) {
+	data := t.TempDir()
+	target := filepath.Join(t.TempDir(), "here")
+	os.MkdirAll(target, 0o755)
+	run(t, data, nil, "alias", "here", target)
+
+	// Simulate z pass --exclude with the alias target.
+	r := run(t, data, nil, "query", "--exclude", target, "here")
+	if r.code == 0 || !strings.Contains(r.stderr, "you are already in the only match") {
+		t.Errorf("excluded alias: code=%d stderr=%q", r.code, r.stderr)
+	}
+}
+
+func TestAliasOverwrite(t *testing.T) {
+	data := t.TempDir()
+	old := filepath.Join(t.TempDir(), "old")
+	new := filepath.Join(t.TempDir(), "new")
+	os.MkdirAll(old, 0o755)
+	os.MkdirAll(new, 0o755)
+
+	run(t, data, nil, "alias", "home", old)
+	run(t, data, nil, "alias", "home", new)
+
+	out := strings.TrimSpace(run(t, data, nil, "query", "home").stdout)
+	if out != new {
+		t.Errorf("alias overwrite: query = %q, want %q", out, new)
+	}
+}

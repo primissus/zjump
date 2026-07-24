@@ -1,4 +1,8 @@
-package db
+// Package atomic provides a crash-safe atomic file writer used by the database
+// and alias store. Mirrors zoxide's atomic write semantics: write a temp file in
+// the same directory, sync, best-effort preserve ownership, then rename over the
+// target (R-DB-2, ARCHITECTURE.md §3).
+package atomic
 
 import (
 	"fmt"
@@ -6,15 +10,13 @@ import (
 	"path/filepath"
 )
 
-// writeAtomic writes data to path atomically: a randomly-named temp file in the
-// SAME directory, Sync, best-effort owner preservation (Unix), then rename over
+// Write writes data to path atomically: a randomly-named temp file in the
+// same directory, Sync, best-effort owner preservation (Unix), then rename over
 // the target; the temp file is cleaned up on any failure. A crash mid-write can
-// never leave the target truncated or corrupt (R-DB-2, ARCHITECTURE.md §3).
-func writeAtomic(path string, data []byte) (err error) {
+// never leave the target truncated or corrupt.
+func Write(path string, data []byte) (err error) {
 	dir := filepath.Dir(path)
 
-	// os.CreateTemp uses O_CREATE|O_EXCL with a random name — the same
-	// collision-safe atomic creation zoxide does by hand.
 	tmp, err := os.CreateTemp(dir, "tmp_*")
 	if err != nil {
 		return fmt.Errorf("could not create temp file in %s: %w", dir, err)
@@ -22,7 +24,7 @@ func writeAtomic(path string, data []byte) (err error) {
 	tmpName := tmp.Name()
 	defer func() {
 		if err != nil {
-			_ = tmp.Close() // may already be closed; ignore
+			_ = tmp.Close()
 			_ = os.Remove(tmpName)
 		}
 	}()

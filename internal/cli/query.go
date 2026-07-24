@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"zjump/internal/alias"
 	"zjump/internal/config"
 	"zjump/internal/db"
 	"zjump/internal/errs"
@@ -81,6 +82,19 @@ type queryParams struct {
 }
 
 func doQuery(database *db.Database, p queryParams) error {
+	// Alias resolution: in default mode only (not --list/--interactive), if
+	// there is exactly one keyword and it exactly matches an alias, resolve it
+	// directly. Alias beats frecency but does not affect --list or --interactive
+	// modes (which stay pure frecency).
+	if !p.interactive && !p.list && len(p.keywords) == 1 {
+		if resolved, aErr := resolveAlias(p.keywords[0], p); aErr != nil {
+			return aErr
+		} else if resolved != "" {
+			_, werr := fmt.Fprintln(os.Stdout, resolved)
+			return errs.PipeExit(werr, "stdout")
+		}
+	}
+
 	now, err := paths.CurrentTime()
 	if err != nil {
 		return err
@@ -222,4 +236,33 @@ func queryFzf() (*fzf.Child, error) {
 		f.EnablePreview()
 	}
 	return f.Spawn()
+}
+
+// resolveAlias checks whether keyword is an exact (case-sensitive) match for a
+// stored alias. Returns the target path if so, "" if no alias matches, or an
+// error if the alias target is missing on disk or equals --exclude.
+func resolveAlias(keyword string, p queryParams) (string, error) {
+	dataDir, err := config.DataDir()
+	if err != nil {
+		return "", err
+	}
+	store, aErr := alias.Open(dataDir)
+	if aErr != nil {
+		return "", nil // file missing or corrupt: no aliases, fall through
+	}
+	target, ok := store.Get(keyword)
+	if !ok {
+		return "", nil
+	}
+
+	if p.excludeSet && target == p.exclude {
+		return "", fmt.Errorf("you are already in the only match")
+	}
+
+	info, statErr := os.Stat(target)
+	if statErr != nil || !info.IsDir() {
+		return "", fmt.Errorf("alias %q points to a directory that no longer exists: %s", keyword, target)
+	}
+
+	return target, nil
 }

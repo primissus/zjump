@@ -268,3 +268,24 @@ Mirror zoxide's split (ARCHITECTURE.md §10, DESIGN.md §11):
 - **F-3** the `import` subcommand (six sources).
 - **F-4** Windows / cross-platform (PowerShell, `cygpath`, UNC, `which.exe`).
 - **F-5** optional `_ZO_*` env-var fallback for drop-in familiarity.
+
+---
+
+## 9. Phase 6 — aliases & git jumps (2026-07-24 extension re-scope)
+
+Beyond zoxide parity. User approved re-scope to add:
+
+- **Directory aliases** (`z <alias>`, `z -a <name> <dir>`) backed by a separate
+  versioned binary store (`internal/alias`, format magic `ZJAL`) alongside the
+  database. Alias resolution is case-sensitive exact-match, beats frecency (but
+  not local directories), and applies only in default query mode.
+- **Git branch/worktree jumps** (`z -b <branch> [repo]`, `z -w <name> [repo]`)
+  via `internal/git` (porcelain parser + exec layer). Both are read-only —
+  they never create worktrees. Repo resolution: omitted → current CWD's repo;
+  given → frecency query (must resolve to a git dir).
+
+A `writeAtomic` → `internal/atomic` refactor (`Write` exported) eliminates
+duplication between the DB and alias store.
+
+See [`REQUIREMENTS.md` §2.11–§2.12](./REQUIREMENTS.md) for the full `R-ALS-*`
+and `R-GIT-*` requirements.

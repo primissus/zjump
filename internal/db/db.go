@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"zjump/internal/atomic"
 )
 
 // Filename is the database file's name within the data directory. Together with
@@ -71,7 +73,7 @@ func (db *Database) Save() error {
 	if err != nil {
 		return fmt.Errorf("could not serialize database: %w", err)
 	}
-	if err := writeAtomic(db.path, data); err != nil {
+	if err := atomic.Write(db.path, data); err != nil {
 		return fmt.Errorf("could not write to database: %w", err)
 	}
 	db.dirty = false

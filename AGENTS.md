@@ -6,9 +6,11 @@
   a frecency-based directory-jumping CLI tool.
 - Current status: **implemented** for the committed scope in
   [`REQUIREMENTS.md`](./REQUIREMENTS.md) (add/query/remove/init/edit, bash+zsh,
-  fzf). Source lives under `cmd/zjump` and `internal/*`; `go test ./...` is the
-  dependency-free suite and `go test -tags shelltests ./...` adds the real
-  bash/zsh/fzf integration tests.
+  fzf), plus the **extension scope** (aliases, git branch/worktree jumps,
+  2026-07-24 re-scope). Source lives under `cmd/zjump` and `internal/*`;
+  `go test ./...` is the dependency-free suite and
+  `go test -tags shelltests ./...` adds the real bash/zsh/fzf/git integration
+  tests.
 
 ## Authoritative specs — read before touching anything
 

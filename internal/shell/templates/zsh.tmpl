@@ -77,6 +77,17 @@ function __zjump_z() {
         __zjump_cd "$1"
     elif [[ "$#" -eq 2 ]] && [[ "$1" = "--" ]]; then
         __zjump_cd "$2"
+    elif [[ "$1" = "-a" || "$1" = "--alias" ]]; then
+        shift
+        \command zjump alias "$@"
+    elif [[ "$1" = "-b" || "$1" = "--branch" ]]; then
+        shift
+        \builtin local result
+        result="$(\command zjump branch "$@")" && __zjump_cd "${result}"
+    elif [[ "$1" = "-w" || "$1" = "--worktree" ]]; then
+        shift
+        \builtin local result
+        result="$(\command zjump worktree "$@")" && __zjump_cd "${result}"
     else
         \builtin local result
         # shellcheck disable=SC2312

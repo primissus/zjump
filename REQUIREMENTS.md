@@ -30,6 +30,7 @@ Decisions locked with the user:
 | `import` subcommand | Out of scope |
 | DB format | zjump-native — **not** byte-compatible with zoxide's `db.zo` |
 | Target platforms | Unix (Linux, macOS). Windows out of scope |
+| **Extensions (2026-07-24 re-scope)** | Aliases (§2.11) + git branch/worktree jumps (§2.12) |
 
 ---
 
@@ -219,8 +220,55 @@ one-for-one:
   trace/panic dump.
 - **R-ERR-4** The invalid-system-clock error (system time before the Unix epoch)
   applies to **every** subcommand that reads the current time — `add` (R-ADD-9),
-  `query`, and `edit`. `remove` never reads the clock and therefore has no
-  clock-error case.
+   `query`, and `edit`. `remove` never reads the clock and therefore has no
+   clock-error case.
+
+### 2.11 `alias` — named directory shortcuts
+
+- **R-ALS-1** `zjump alias` (no args) lists all aliases as `name<TAB>path`,
+  one per line, sorted by name.
+- **R-ALS-2** `zjump alias <name> <dir>` creates or overwrites an alias.
+  `name` is validated: non-empty, no `/`, no `\n`/`\r`, not `.`/`..`, no
+  leading `-`. `dir` is resolved (lexically or canonical per
+  `_ZJUMP_RESOLVE_SYMLINKS`) and must be an existing directory; exclude-globs
+  are NOT applied (explicit user intent).
+- **R-ALS-3** `zjump alias -d|--delete <name>` removes the alias; errors
+  `"alias not found: <name>"` when absent.
+- **R-ALS-4** Aliases are stored in a separate zjump-native versioned binary
+  file (`aliases`) in the same data directory as the database, with the same
+  atomic-write discipline (via `internal/atomic`).
+- **R-ALS-5** `zjump query <keyword>` (default mode, single keyword) resolves
+  an exact case-sensitive alias match **before** falling through to frecency.
+  `--list` and `--interactive` remain pure frecency. Multi-keyword queries
+  (`z foo bar`) never trigger alias resolution.
+- **R-ALS-6** A dangling alias (target directory no longer exists) errors
+  `"alias '<name>' points to a directory that no longer exists: <path>"`; the
+  alias is never auto-deleted.
+- **R-ALS-7** When the alias target equals `--exclude`, the error is
+  `"you are already in the only match"`.
+
+### 2.12 `branch` / `worktree` — git-based jumps
+
+- **R-GIT-1** `zjump branch <branch> [repo-keywords...]` prints the worktree
+  path (including the main checkout) where `<branch>` is checked out, matched
+  by exact branch shortname.
+- **R-GIT-2** `zjump worktree <name> [repo-keywords...]` prints a worktree
+  path, matched first by directory basename (exact), then by branch shortname
+  (exact). Ambiguity (>1 match) errors listing candidates.
+- **R-GIT-3** `[repo-keywords]` resolution: when omitted, the current working
+  directory is used (`git rev-parse --show-toplevel`); when given, they are
+  matched against the frecency database (best-match, must exist), and that path
+  must be inside a git repository.
+- **R-GIT-4** When no matching worktree is found, `branch` errors
+  `"branch not checked out in any worktree: <branch>"` with a hint of available
+  branches; `worktree` errors `"no worktree found: <name>"` with available
+  worktrees. Both subcommands are read-only — they never create worktrees.
+- **R-GIT-5** git not installed → `"could not find git, is it installed?"`;
+  not a git repo → `"not a git repository: <path>"`.
+- **R-GIT-6** The shell dispatch (`z -b|--branch` / `z -w|--worktree`) lives in
+  the generated `__zjump_z` function, interleaved after the standard `--`/`-d`
+  checks and before the frecency-query fallback, so every init-generated jump
+  command (under any `--cmd` prefix) supports these flags.
 
 ---
 
