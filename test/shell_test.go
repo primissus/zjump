@@ -21,7 +21,7 @@ func requireBin(t *testing.T, name string) {
 }
 
 // binDir is the directory containing the built zjump, prepended to PATH so the
-// generated `z`/`zi` functions (which call `\command zjump`) resolve.
+// generated `zz`/`zzi` functions (which call `\command zjump`) resolve.
 func binDir() string { return filepath.Dir(zjumpBin) }
 
 // renderInit runs `zjump init <shell> <flags...>` and returns the script.
@@ -104,10 +104,10 @@ func TestZJump(t *testing.T) {
 
 		script := `
 eval "$(zjump init ` + shell + ` --hook prompt)"
-z backend >/dev/null 2>&1; echo "kw=$(pwd)"
+zz backend >/dev/null 2>&1; echo "kw=$(pwd)"
 cd "` + root + `"
-z "` + frontend + `" >/dev/null 2>&1; echo "dir=$(pwd)"
-z >/dev/null 2>&1; echo "home=$(pwd)"
+zz "` + frontend + `" >/dev/null 2>&1; echo "dir=$(pwd)"
+zz >/dev/null 2>&1; echo "home=$(pwd)"
 `
 		out, code := execScript(t, shell, script, []string{"_ZJUMP_DATA_DIR=" + data})
 		if code != 0 {
@@ -120,13 +120,13 @@ z >/dev/null 2>&1; echo "home=$(pwd)"
 			}
 		}
 		if lines["kw"] != backend {
-			t.Errorf("%s: z backend = %q, want %q", shell, lines["kw"], backend)
+			t.Errorf("%s: zz backend = %q, want %q", shell, lines["kw"], backend)
 		}
 		if lines["dir"] != frontend {
-			t.Errorf("%s: z <existing> = %q, want %q", shell, lines["dir"], frontend)
+			t.Errorf("%s: zz <existing> = %q, want %q", shell, lines["dir"], frontend)
 		}
 		if home, _ := os.UserHomeDir(); lines["home"] != home {
-			t.Errorf("%s: z (no args) = %q, want %q", shell, lines["home"], home)
+			t.Errorf("%s: zz (no args) = %q, want %q", shell, lines["home"], home)
 		}
 	}
 }
@@ -201,8 +201,8 @@ func TestFlagsInShellTemplate(t *testing.T) {
 
 		script := `
 eval "$(zjump init ` + shell + ` --hook none)"
-z -a proj "` + target + `"
-z proj >/dev/null 2>&1; echo "alias_jump=$(pwd)"
+zz -a proj "` + target + `"
+zz proj >/dev/null 2>&1; echo "alias_jump=$(pwd)"
 `
 		out, code := execScript(t, shell, script, []string{"_ZJUMP_DATA_DIR=" + data})
 		if code != 0 {
@@ -215,7 +215,7 @@ z proj >/dev/null 2>&1; echo "alias_jump=$(pwd)"
 			}
 		}
 		if lines["alias_jump"] != target {
-			t.Errorf("%s: z proj (alias) = %q, want %q", shell, lines["alias_jump"], target)
+			t.Errorf("%s: zz proj (alias) = %q, want %q", shell, lines["alias_jump"], target)
 		}
 	}
 }

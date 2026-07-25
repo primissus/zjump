@@ -17,7 +17,7 @@ func runInit(args []string) error {
 	fs.BoolVar(&noCmd, "no-cmd", false, "")
 	fs.BoolVar(&noCmd, "no-aliases", false, "")
 	var cmd string
-	fs.StringVar(&cmd, "cmd", "z", "")
+	fs.StringVar(&cmd, "cmd", "zz", "")
 	var hook string
 	fs.StringVar(&hook, "hook", "pwd", "")
 

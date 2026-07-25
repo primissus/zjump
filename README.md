@@ -26,26 +26,26 @@ zjump works on **bash** and **zsh** (Linux and macOS).
 ## Getting started
 
 ```sh
-z foo              # cd into the highest-ranked directory matching foo
-z foo bar          # cd into the highest-ranked directory matching foo and bar
-z foo /            # cd into a subdirectory starting with foo
+zz foo              # cd into the highest-ranked directory matching foo
+zz foo bar          # cd into the highest-ranked directory matching foo and bar
+zz foo /            # cd into a subdirectory starting with foo
 
-z ~/foo            # z also works like a regular cd command
-z foo/             # cd into a relative path
-z ..               # cd one level up
-z -                # cd into the previous directory
+zz ~/foo            # zz also works like a regular cd command
+zz foo/             # cd into a relative path
+zz ..               # cd one level up
+zz -                # cd into the previous directory
 
-zi foo             # cd with interactive selection (using fzf)
+zzi foo             # cd with interactive selection (using fzf)
 
-z foo<SPACE><TAB>  # show interactive completions (bash 4.4+/zsh only)
+zz foo<SPACE><TAB>  # show interactive completions (bash 4.4+/zsh only)
 
-z -a proj ~/src/proj  # create an alias 'proj' → ~/src/proj
-z proj                # jump to the alias target (aliases beat frecency)
-z -b main myrepo      # jump to the worktree where 'main' is checked out
-z -w api myrepo       # jump to a worktree by name (e.g. directory named 'api')
+zz -a proj ~/src/proj  # create an alias 'proj' → ~/src/proj
+zz proj                # jump to the alias target (aliases beat frecency)
+zz -b main myrepo      # jump to the worktree where 'main' is checked out
+zz -w api myrepo       # jump to a worktree by name (e.g. directory named 'api')
 ```
 
-The `z` command tracks directories as you visit them and ranks them by
+The `zz` command tracks directories as you visit them and ranks them by
 **frecency** (frequency + recency), so the places you actually use bubble to the
 top. Read more about the [matching](#matching) and [scoring](#frecency-scoring)
 algorithms below.
@@ -108,15 +108,15 @@ tracking directories as you `cd` around.
 ### 3. Install fzf (optional)
 
 [fzf](https://github.com/junegunn/fzf) is a command-line fuzzy finder, used by
-zjump for interactive selection (`zi`, `zjump edit`) and Space-Tab completions.
-Core `z` jumping works without it.
+zjump for interactive selection (`zzi`, `zjump edit`) and Space-Tab completions.
+Core `zz` jumping works without it.
 
 > **Note:** the minimum supported fzf version is **v0.51.0**.
 
 ## Commands
 
 The `zjump` binary exposes five subcommands. In everyday use you'll rarely call
-them directly — the `z`/`zi` shell functions and the tracking hook do it for you
+them directly — the `zz`/`zzi` shell functions and the tracking hook do it for you
 — but the full surface is documented here.
 
 Global flags: `-h`/`--help`, `-V`/`--version`.
@@ -140,7 +140,7 @@ This is what the shell hook runs on every navigation.
 
 ### `zjump query [keywords]...`
 
-Search the database and print matching directories. This is what `z`/`zi`
+Search the database and print matching directories. This is what `zz`/`zzi`
 invoke under the hood.
 
 | Flag | Description |
@@ -150,7 +150,7 @@ invoke under the hood.
 | `-i`, `--interactive` | Select a match interactively via fzf. Conflicts with `--list`. |
 | `-s`, `--score` | Prefix each result with its decayed frecency score. |
 | `-a`, `--all` | Include directories that no longer exist (disables the existence filter). |
-| `--exclude <path>` | Skip this exact path in the results (never deletes it; used by `z` to exclude `$PWD`). |
+| `--exclude <path>` | Skip this exact path in the results (never deletes it; used by `zz` to exclude `$PWD`). |
 | `--base-dir <path>` | Only return matches that are component-wise under this directory. |
 
 - Default mode prints the single best match, or errors `no match found`.
@@ -165,7 +165,7 @@ neither is an error (`path not found in database: <path>`).
 
 ### `zjump init <bash|zsh>`
 
-Print the shell integration script (the `z`/`zi` functions, the tracking hook,
+Print the shell integration script (the `zz`/`zzi` functions, the tracking hook,
 and completions). You source its output, typically via
 `eval "$(zjump init bash)"`. See [Configuration](#configuration) for its flags.
 
@@ -223,7 +223,7 @@ resolution works the same as `branch`.<
 When calling `zjump init`, the following flags are available:
 
 - **`--cmd <cmd>`**
-  - Changes the prefix of the `z` and `zi` commands. Default: `z`.
+  - Changes the prefix of the `zz` and `zzi` commands. Default: `zz`.
   - `--cmd j` changes them to `j` / `ji`.
   - `--cmd cd` replaces the `cd` command.
 - **`--hook <hook>`**
@@ -239,7 +239,7 @@ When calling `zjump init`, the following flags are available:
     emulated: the hook runs at every prompt but only calls `zjump add` when the
     directory actually changed.
 - **`--no-cmd`** (alias `--no-aliases`)
-  - Prevents zjump from defining the `z` and `zi` commands. The underlying
+  - Prevents zjump from defining the `zz` and `zzi` commands. The underlying
     functions remain available as `__zjump_z` and `__zjump_zi` if you want to
     wire them up yourself.
 
@@ -259,7 +259,7 @@ called; the rest are read on each invocation.
     | macOS | `$HOME/Library/Application Support/zjump` |
 
 - **`_ZJUMP_ECHO`**
-  - When set to `1`, `z` prints the matched directory before navigating to it.
+  - When set to `1`, `zz` prints the matched directory before navigating to it.
 - **`_ZJUMP_EXCLUDE_DIRS`**
   - Directories to exclude from the database, as a `:`-separated list of
     [globs](https://man7.org/linux/man-pages/man7/glob.7.html) (e.g.
@@ -281,7 +281,7 @@ called; the rest are read on each invocation.
 
 ## How it works
 
-zjump is a stateless, short-lived binary. Every `z`/`add`/`query` invocation
+zjump is a stateless, short-lived binary. Every `zz`/`add`/`query` invocation
 opens a single database file, does one unit of work, and (only when something
 changed) atomically rewrites it. There is no daemon — the shell hook simply runs
 `zjump add` as you navigate.

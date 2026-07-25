@@ -16,7 +16,7 @@ var templatesFS embed.FS
 
 // Opts are the init-time options baked into a rendered script.
 type Opts struct {
-	Cmd             string // jump-command prefix (e.g. "z"); used only when HasCmd
+	Cmd             string // jump-command prefix (e.g. "zz"); used only when HasCmd
 	HasCmd          bool   // false under --no-cmd
 	Hook            string // "none" | "prompt" | "pwd"
 	Echo            bool   // from _ZJUMP_ECHO

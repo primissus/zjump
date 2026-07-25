@@ -320,7 +320,7 @@ README:
 The effort is "done" when:
 
 - **A-1** A user can `eval "$(zjump init zsh)"` / `... bash`, navigate normally,
-  and `z <keywords>` lands in the correct highest-frecency directory.
+  and `zz <keywords>` lands in the correct highest-frecency directory.
 - **A-2** The keyword matcher passes a table-driven parity suite mirroring
   zoxide's cases (case-folding, final-component anchoring, overlap rejection).
 - **A-3** Frecency ordering matches zoxide's for a fixed fixture database across

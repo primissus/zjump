@@ -237,7 +237,7 @@ func TestInitProducesScript(t *testing.T) {
 	data := t.TempDir()
 	for _, sh := range []string{"bash", "zsh"} {
 		out := run(t, data, nil, "init", sh).stdout
-		if !strings.Contains(out, "__zjump_z") || !strings.Contains(out, "function z()") {
+		if !strings.Contains(out, "__zjump_z") || !strings.Contains(out, "function zz()") {
 			t.Errorf("init %s missing expected content", sh)
 		}
 	}
@@ -247,8 +247,8 @@ func TestInitProducesScript(t *testing.T) {
 	}
 	// --no-cmd suppresses the z command.
 	out := run(t, data, nil, "init", "bash", "--no-cmd").stdout
-	if strings.Contains(out, "function z()") {
-		t.Error("--no-cmd should not define z()")
+	if strings.Contains(out, "function zz()") {
+		t.Error("--no-cmd should not define zz()")
 	}
 	// --cmd renames.
 	out = run(t, data, nil, "init", "bash", "--cmd", "j").stdout

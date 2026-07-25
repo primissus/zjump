@@ -196,7 +196,7 @@ alongside each phase (AGENTS.md), not deferred.
   pwd-diff), `_ZJUMP_ECHO`/`_ZJUMP_RESOLVE_SYMLINKS` wiring, `--cmd`/`--no-cmd`/
   `--hook`.
 - **Exit:** `eval "$(zjump init zsh|bash)"` in a real shell tracks directories
-  and `z <kw>` jumps (A-1). Shell tests gated behind a build tag.
+  and `zz <kw>` jumps (A-1). Shell tests gated behind a build tag.
 - **Covers:** R-INIT-1..8.
 
 ### Phase 4 — fzf integration (`query -i`, `zi`)
