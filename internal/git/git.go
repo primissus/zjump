@@ -46,6 +46,17 @@ func Worktrees(dir string) ([]Worktree, error) {
 	return parseWorktrees(string(out))
 }
 
+// CurrentBranch runs `git -C dir rev-parse --abbrev-ref HEAD` and returns the
+// branch shortname. Returns "HEAD" for detached HEAD, "" on error.
+func CurrentBranch(dir string) string {
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // parseWorktrees reads `git worktree list --porcelain` output and returns the
 // parsed entries. It is used by Worktrees and tested independently.
 func parseWorktrees(output string) ([]Worktree, error) {

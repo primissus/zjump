@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"zjump/internal/atomic"
+	"github.com/primissus/zjump/internal/atomic"
 )
 
 // Filename is the database file's name within the data directory. Together with

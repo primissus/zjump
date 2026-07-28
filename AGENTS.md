@@ -40,3 +40,18 @@
 - Keep CLI behavior compatible with the parity table in `DESIGN.md` §12;
   call out and justify any deliberate deviation.
 - Write tests alongside new code, not as a separate follow-up.
+
+## Versioning & releases
+
+- The canonical version lives in `internal/cli/cli.go` (`const Version`).
+- When bumping:
+  1. Update `const Version` in `internal/cli/cli.go`.
+  2. Commit with message `chore: bump version to <version>`.
+  3. Tag the commit: `git tag -a v<version> -m "v<version>"`.
+  4. Push the tag: `git push origin v<version>`.
+  The tag triggers `.github/workflows/release.yml`, which runs goreleaser
+  to cross-compile and publish GitHub Release assets.
+- goreleaser reads the version from the git tag, not from the Go constant.
+  Keep both in sync. See `.goreleaser.yml` for the build matrix.
+- `go install github.com/primissus/zjump/cmd/zjump@latest` always works;
+  pre-built tarballs are available on the GitHub Releases page.

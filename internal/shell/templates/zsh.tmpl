@@ -71,7 +71,23 @@ function __zjump_doctor() {
 # Jump to a directory using only keywords.
 function __zjump_z() {
     __zjump_doctor
-    if [[ "$#" -eq 0 ]]; then
+    if [[ "$#" -eq 1 && ( "$1" = '--help' || "$1" = '-h' ) ]]; then
+        \builtin printf '%s\n' \
+            'Usage: {{ .Cmd }} [OPTIONS] [KEYWORD]' \
+            '' \
+            'Jump to a directory using keywords or flags.' \
+            '' \
+            'Options:' \
+            '  -a, --alias <NAME> <PATH>    Set a named alias for a directory' \
+            '  -b, --branch <BRANCH>        Jump to a git branch worktree' \
+            '  -w, --worktree <NAME>        Jump to a git worktree by name' \
+            '  -h, --help                   Show this help message' \
+            '' \
+            'Without arguments, jumps to $HOME.' \
+            'Use - to jump to the previous directory.' \
+            'Use -- <PATH> to jump to an exact path.'
+        return
+    elif [[ "$#" -eq 0 ]]; then
         __zjump_cd ~
     elif [[ "$#" -eq 1 ]] && { [[ -d "$1" ]] || [[ "$1" = '-' ]] || [[ "$1" =~ ^[-+][0-9]+$ ]]; }; then
         __zjump_cd "$1"

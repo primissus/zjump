@@ -269,6 +269,16 @@ one-for-one:
   the generated `__zjump_z` function, interleaved after the standard `--`/`-d`
   checks and before the frecency-query fallback, so every init-generated jump
   command (under any `--cmd` prefix) supports these flags.
+- **R-GIT-7** When `<branch>` is omitted (`zz -b` with no argument), an fzf
+  interactive picker is displayed listing all checked-out branches in the
+  current repo. Selecting one jumps to its worktree. If there is exactly one
+  candidate, it is selected automatically (no fzf needed). If CWD is not inside
+  a git repository, the top 10 worktree directories from the frecency database
+  are listed instead, labeled by their current branch.
+- **R-GIT-8** When `<name>` is omitted (`zz -w` with no argument), an fzf
+  interactive picker is displayed listing all worktrees in the current repo
+  (format: `basename (branch)`). Selecting one jumps to it. Same single-offer
+  fast path and out-of-repo DB-fallback as R-GIT-7.
 
 ---
 

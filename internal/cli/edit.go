@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"zjump/internal/db"
-	"zjump/internal/errs"
-	"zjump/internal/fzf"
-	"zjump/internal/paths"
+	"github.com/primissus/zjump/internal/db"
+	"github.com/primissus/zjump/internal/errs"
+	"github.com/primissus/zjump/internal/fzf"
+	"github.com/primissus/zjump/internal/paths"
 )
 
 // runEdit implements `zjump edit`. With no subcommand it launches the fzf-driven

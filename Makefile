@@ -1,9 +1,11 @@
 .PHONY: help build dev run test test-all lint fmt install clean
 
+.DEFAULT_GOAL := help
+
 BINARY := zjump
 BIN_DIR := bin
 
-build:        ## Build binary to repo root (default; also: make help)
+build:        ## Build binary to repo root (also: make help)
 	go build -o $(BINARY) ./cmd/zjump
 
 help:         ## Print this help message and exit
@@ -29,8 +31,10 @@ lint:         ## Check formatting + vet
 fmt:          ## Format all Go source
 	gofmt -w .
 
-install: build ## Build and run scripts/install.sh
-	scripts/install.sh
+INSTALL_DIR := $(or $(DESTDIR),$(HOME)/.local/bin)
+
+install: build ## Install to ~/.local/bin (set DESTDIR=/usr/local/bin for sudo)
+	scripts/install.sh "$(INSTALL_DIR)"
 
 clean:        ## Remove build artifacts
 	rm -f $(BINARY)

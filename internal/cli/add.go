@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"zjump/internal/config"
-	"zjump/internal/paths"
+	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/paths"
 )
 
 // runAdd implements `zjump add`. It loads exclude/maxage config and reads the

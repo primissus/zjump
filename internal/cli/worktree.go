@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"zjump/internal/errs"
-	"zjump/internal/git"
+	"github.com/primissus/zjump/internal/errs"
+	"github.com/primissus/zjump/internal/git"
 )
 
 // runWorktree implements `zjump worktree <name> [repo-keywords...]`. It matches
@@ -21,7 +21,7 @@ func runWorktree(args []string) error {
 		return err
 	}
 	if len(rest) < 1 {
-		return fmt.Errorf("worktree: worktree name required")
+		return runWorktreePick(rest[1:]) // rest is empty, so repoKW=[]
 	}
 	name := rest[0]
 	repoKW := rest[1:]
@@ -93,4 +93,31 @@ func runWorktree(args []string) error {
 		hint = fmt.Sprintf("\navailable worktrees: %s", strings.Join(available, ", "))
 	}
 	return fmt.Errorf("no worktree found: %s%s", name, hint)
+}
+
+func runWorktreePick(repoKW []string) error {
+	if len(repoKW) == 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("could not get current working directory: %w", err)
+		}
+		repoDir, repoErr := git.RepoRoot(cwd)
+		if repoErr != nil {
+			return pickFromDBWorktree()
+		}
+		entries, err := collectWorktreeEntries(repoDir)
+		if err != nil {
+			return fmt.Errorf("could not list worktrees: %w", err)
+		}
+		return gitFzfPickAndPrint(entries)
+	}
+	repoDir, err := resolveRepo(repoKW)
+	if err != nil {
+		return err
+	}
+	entries, err := collectWorktreeEntries(repoDir)
+	if err != nil {
+		return fmt.Errorf("could not list worktrees: %w", err)
+	}
+	return gitFzfPickAndPrint(entries)
 }

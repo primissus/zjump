@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	"zjump/internal/errs"
+	"github.com/primissus/zjump/internal/errs"
 )
 
 // ErrNotFound is returned when the fzf binary is not on PATH (R-FZF-1).
@@ -42,6 +42,28 @@ func New() (*Fzf, error) {
 // Args appends fzf arguments.
 func (f *Fzf) Args(args ...string) *Fzf {
 	f.args = append(f.args, args...)
+	return f
+}
+
+// WithNth overrides the --nth argument (search field index, 1-based) for this
+// fzf invocation. Must be called after New().
+func (f *Fzf) WithNth(n int) *Fzf {
+	f.Args(fmt.Sprintf("--nth=%d", n))
+	return f
+}
+
+// StdAppearance appends the standard zjump fzf appearance arguments used by both
+// query --interactive and the git branch/worktree pickers (--exact, --no-sort,
+// --cycle, border, height, etc.).
+func (f *Fzf) StdAppearance() *Fzf {
+	f.Args(
+		"--exact", "--no-sort",
+		"--bind=ctrl-z:ignore,btab:up,tab:down",
+		"--cycle", "--keep-right",
+		"--border=sharp", "--height=45%",
+		"--info=inline", "--layout=reverse",
+		"--tabstop=1", "--exit-0",
+	)
 	return f
 }
 

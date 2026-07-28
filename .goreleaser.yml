@@ -1,0 +1,44 @@
+# GoReleaser configuration for zjump.
+# See https://goreleaser.com for full reference.
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: zjump
+    main: ./cmd/zjump
+    binary: zjump
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - formats: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  draft: false
+  prerelease: auto
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - Merge pull request
+      - Merge branch

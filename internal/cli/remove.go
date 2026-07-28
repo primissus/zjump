@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"zjump/internal/paths"
+	"github.com/primissus/zjump/internal/paths"
 )
 
 // runRemove implements `zjump remove`. It never reads the clock, so it has no

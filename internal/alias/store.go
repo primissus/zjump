@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"zjump/internal/atomic"
+	"github.com/primissus/zjump/internal/atomic"
 )
 
 const filename = "aliases"

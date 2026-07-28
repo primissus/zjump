@@ -6,10 +6,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"zjump/internal/alias"
-	"zjump/internal/config"
-	"zjump/internal/errs"
-	"zjump/internal/paths"
+	"github.com/primissus/zjump/internal/alias"
+	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/errs"
+	"github.com/primissus/zjump/internal/paths"
 )
 
 // runAlias implements `zjump alias`. With no args it lists; with a name and

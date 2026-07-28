@@ -3,7 +3,7 @@ package glob_test
 import (
 	"testing"
 
-	"zjump/internal/glob"
+	"github.com/primissus/zjump/internal/glob"
 )
 
 func mustNew(t *testing.T, pattern string) *glob.Glob {

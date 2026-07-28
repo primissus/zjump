@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"zjump/internal/config"
-	"zjump/internal/errs"
-	"zjump/internal/shell"
+	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/errs"
+	"github.com/primissus/zjump/internal/shell"
 )
 
 // runInit implements `zjump init <shell>`. Only zsh and bash are supported

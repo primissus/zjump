@@ -8,42 +8,55 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
-	"zjump/internal/config"
-	"zjump/internal/db"
-	"zjump/internal/errs"
-	"zjump/internal/glob"
+	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/db"
+	"github.com/primissus/zjump/internal/errs"
+	"github.com/primissus/zjump/internal/glob"
+	"github.com/primissus/zjump/internal/log"
 )
 
 // Version is zjump's version string.
-const Version = "0.1.0-dev"
+const Version = "0.1.1"
 
 // Run dispatches a subcommand. It returns nil on success, an errs.SilentExit to
 // stop with a specific code and no message, or a normal error (printed by main
 // as the full causal chain).
 func Run(args []string) error {
-	if len(args) == 0 {
+	debug, logFile, rest := extractGlobalFlags(args)
+
+	if debug {
+		if err := log.Setup(logFile); err != nil {
+			return fmt.Errorf("debug log %q: %w", logFile, err)
+		}
+		defer log.Close()
+		log.Debugf("zjump %s invoked: %s", Version, strings.Join(os.Args, " "))
+	}
+
+	if len(rest) == 0 {
 		printUsage(os.Stderr)
 		return errs.SilentExit{Code: 1}
 	}
 
-	switch args[0] {
+	switch rest[0] {
 	case "add":
-		return runAdd(args[1:])
+		return runAdd(rest[1:])
 	case "query":
-		return runQuery(args[1:])
+		return runQuery(rest[1:])
 	case "remove":
-		return runRemove(args[1:])
+		return runRemove(rest[1:])
 	case "init":
-		return runInit(args[1:])
+		return runInit(rest[1:])
 	case "edit":
-		return runEdit(args[1:])
+		return runEdit(rest[1:])
 	case "alias":
-		return runAlias(args[1:])
+		return runAlias(rest[1:])
 	case "branch":
-		return runBranch(args[1:])
+		return runBranch(rest[1:])
 	case "worktree":
-		return runWorktree(args[1:])
+		return runWorktree(rest[1:])
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return nil
@@ -51,8 +64,36 @@ func Run(args []string) error {
 		fmt.Fprintf(os.Stdout, "zjump %s\n", Version)
 		return nil
 	default:
-		return fmt.Errorf("unrecognized subcommand %q (run 'zjump --help')", args[0])
+		return fmt.Errorf("unrecognized subcommand %q (run 'zjump --help')", rest[0])
 	}
+}
+
+// defaultLogFile returns the default path for --log-file.
+func defaultLogFile() string {
+	return filepath.Join(os.TempDir(), "zjump-debug.log")
+}
+
+// extractGlobalFlags strips --debug and --log-file[=PATH] from args, returning
+// the parsed values and the remaining positional + subcommand-local args.
+func extractGlobalFlags(args []string) (debug bool, logFile string, rest []string) {
+	logFile = defaultLogFile()
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--debug":
+			debug = true
+		case arg == "--log-file":
+			i++
+			if i < len(args) {
+				logFile = args[i]
+			}
+		case strings.HasPrefix(arg, "--log-file="):
+			logFile = arg[len("--log-file="):]
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	return
 }
 
 // newFlagSet returns a ContinueOnError flag set that discards flag's own output
@@ -99,6 +140,7 @@ func openDB() (*db.Database, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("opening database: %s", dir)
 	return db.OpenDir(dir)
 }
 
@@ -116,7 +158,11 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `zjump `+Version+` — a frecency-based cd replacement (a Go reimplementation of zoxide)
 
 Usage:
-    zjump <COMMAND> [OPTIONS]
+    zjump [--debug] [--log-file PATH] <COMMAND> [OPTIONS]
+
+Global flags:
+    --debug                   Enable debug logging
+    --log-file PATH           Log file path (default: `+defaultLogFile()+`)
 
 Commands:
     add <paths>...             Add a directory or increment its rank

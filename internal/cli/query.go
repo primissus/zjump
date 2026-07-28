@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	"zjump/internal/alias"
-	"zjump/internal/config"
-	"zjump/internal/db"
-	"zjump/internal/errs"
-	"zjump/internal/fzf"
-	"zjump/internal/paths"
+	"github.com/primissus/zjump/internal/alias"
+	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/db"
+	"github.com/primissus/zjump/internal/errs"
+	"github.com/primissus/zjump/internal/fzf"
+	"github.com/primissus/zjump/internal/paths"
 )
 
 // runQuery implements `zjump query`. Per deviation D-4 the DB is rewritten only
@@ -220,19 +220,7 @@ func queryFzf() (*fzf.Child, error) {
 	if opts, ok := config.FzfOpts(); ok {
 		f.Env("FZF_DEFAULT_OPTS", opts)
 	} else {
-		f.Args(
-			"--exact",
-			"--no-sort",
-			"--bind=ctrl-z:ignore,btab:up,tab:down",
-			"--cycle",
-			"--keep-right",
-			"--border=sharp",
-			"--height=45%",
-			"--info=inline",
-			"--layout=reverse",
-			"--tabstop=1",
-			"--exit-0",
-		)
+		f.StdAppearance()
 		f.EnablePreview()
 	}
 	return f.Spawn()

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"zjump/internal/glob"
+	"github.com/primissus/zjump/internal/glob"
 )
 
 // DataDir resolves the directory holding the database file. Uses _ZJUMP_DATA_DIR

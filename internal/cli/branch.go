@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"zjump/internal/config"
-	"zjump/internal/db"
-	"zjump/internal/errs"
-	"zjump/internal/git"
-	"zjump/internal/paths"
+	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/db"
+	"github.com/primissus/zjump/internal/errs"
+	"github.com/primissus/zjump/internal/git"
+	"github.com/primissus/zjump/internal/paths"
 )
 
 // runBranch implements `zjump branch <branch> [repo-keywords...]`. It finds a
@@ -23,7 +23,7 @@ func runBranch(args []string) error {
 		return err
 	}
 	if len(rest) < 1 {
-		return fmt.Errorf("branch: branch name required")
+		return runBranchPick(rest[1:]) // rest is empty, so repoKW=[]
 	}
 	branch := rest[0]
 	repoKW := rest[1:]
@@ -71,6 +71,33 @@ func runBranch(args []string) error {
 		return errs.PipeExit(werr, "stdout")
 	}
 	return nil
+}
+
+func runBranchPick(repoKW []string) error {
+	if len(repoKW) == 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("could not get current working directory: %w", err)
+		}
+		repoDir, repoErr := git.RepoRoot(cwd)
+		if repoErr != nil {
+			return pickFromDBBranch()
+		}
+		entries, err := collectBranchEntries(repoDir)
+		if err != nil {
+			return fmt.Errorf("could not list branches: %w", err)
+		}
+		return gitFzfPickAndPrint(entries)
+	}
+	repoDir, err := resolveRepo(repoKW)
+	if err != nil {
+		return err
+	}
+	entries, err := collectBranchEntries(repoDir)
+	if err != nil {
+		return fmt.Errorf("could not list branches: %w", err)
+	}
+	return gitFzfPickAndPrint(entries)
 }
 
 // resolveRepo resolves the target repository directory. If keywords are given

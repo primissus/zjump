@@ -56,22 +56,34 @@ zjump can be installed in 3 steps.
 
 ### 1. Install the binary
 
-zjump is distributed as source. You'll need **Go 1.23+** and a Unix system
-(Linux or macOS). From the repository root:
+**Quick install** (downloads the latest release):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/primissus/zjump/main/scripts/install.sh | bash
+```
+
+**From source** (requires Go 1.23+):
 
 ```sh
 # Build and install to /usr/local/bin (may require sudo):
-scripts/install.sh
+scripts/install.sh --build
 
 # ...or install to a directory of your choice (must be on your PATH):
-scripts/install.sh ~/.local/bin
+scripts/install.sh --build ~/.local/bin
 ```
 
 Or build the binary directly and place it on your `PATH` yourself:
 
 ```sh
+# From source:
 go build -o zjump ./cmd/zjump
+
+# Or install via Go toolchain:
+go install github.com/primissus/zjump/cmd/zjump@latest
 ```
+
+Pre-built binaries for Linux and macOS (amd64, arm64) are available on the
+[GitHub Releases](https://github.com/primissus/zjump/releases) page.
 
 ### 2. Set up zjump on your shell
 
