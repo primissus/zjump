@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,20 @@ import (
 	"github.com/primissus/zjump/internal/git"
 )
 
+const worktreeHelp = `Usage: zjump worktree [<name> [repo-keywords...]]
+
+Print a worktree path by name or branch.
+
+With a name, match against worktree directory basenames first,
+then against branch shortnames, and print the path.
+
+With no arguments, launch an interactive fzf picker listing all
+worktrees.
+
+Optionally specify repo-keywords to search the frecency database
+for a specific repository.
+`
+
 // runWorktree implements `zjump worktree <name> [repo-keywords...]`. It matches
 // <name> against worktree directory basenames first, then against branch
 // shortnames, and prints the path of the matched worktree.
@@ -18,6 +33,10 @@ func runWorktree(args []string) error {
 	fs := newFlagSet("worktree")
 	rest, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "worktree", worktreeHelp)
+			return nil
+		}
 		return err
 	}
 	if len(rest) < 1 {

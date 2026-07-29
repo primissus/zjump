@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -9,6 +10,15 @@ import (
 	"github.com/primissus/zjump/internal/config"
 	"github.com/primissus/zjump/internal/paths"
 )
+
+const addHelp = `Usage: zjump add [--score SCORE] <paths>...
+
+Add one or more directories to the frecency database, or increment
+their rank. Paths that match _ZJUMP_EXCLUDE_DIRS are silently skipped.
+
+Flags:
+    -s, --score SCORE    Rank increment (default 1.0)
+`
 
 // runAdd implements `zjump add`. It loads exclude/maxage config and reads the
 // clock BEFORE opening the DB, so a malformed env var or bad clock fails fast
@@ -26,6 +36,10 @@ func runAdd(args []string) error {
 
 	targets, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "add", addHelp)
+			return nil
+		}
 		return err
 	}
 	if len(targets) == 0 {

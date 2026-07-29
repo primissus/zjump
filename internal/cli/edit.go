@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -9,6 +10,19 @@ import (
 	"github.com/primissus/zjump/internal/fzf"
 	"github.com/primissus/zjump/internal/paths"
 )
+
+const editHelp = `Usage: zjump edit [<subcommand> <args>...]
+
+Interactively browse and edit the frecency database via fzf.
+
+Subcommands (used by fzf key bindings):
+    increment <path>    Increment the rank of a path
+    decrement <path>    Decrement the rank of a path
+    delete <path>       Delete a path from the database
+    reload              Reload the display list
+
+Without a subcommand, launches the fzf interactive browser.
+`
 
 // runEdit implements `zjump edit`. With no subcommand it launches the fzf-driven
 // browser; the hidden increment/decrement/delete/reload subcommands back its key
@@ -22,6 +36,10 @@ func runEdit(args []string) error {
 	fs := newFlagSet("edit")
 	rest, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "edit", editHelp)
+			return nil
+		}
 		return err
 	}
 

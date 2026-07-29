@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,20 @@ import (
 	"github.com/primissus/zjump/internal/paths"
 )
 
+const branchHelp = `Usage: zjump branch [<branch> [repo-keywords...]]
+
+Print the worktree path for a checked-out branch.
+
+With a branch name, find the worktree (including the main checkout)
+that has that branch checked out and print its path.
+
+With no arguments, launch an interactive fzf picker listing all
+branches across worktrees.
+
+Optionally specify repo-keywords to search the frecency database
+for a specific repository.
+`
+
 // runBranch implements `zjump branch <branch> [repo-keywords...]`. It finds a
 // worktree (including the main checkout) that has <branch> checked out and
 // prints its path so the shell can cd into it.
@@ -20,6 +35,10 @@ func runBranch(args []string) error {
 	fs := newFlagSet("branch")
 	rest, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "branch", branchHelp)
+			return nil
+		}
 		return err
 	}
 	if len(rest) < 1 {

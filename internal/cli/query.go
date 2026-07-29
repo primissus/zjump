@@ -13,6 +13,21 @@ import (
 	"github.com/primissus/zjump/internal/paths"
 )
 
+const queryHelp = `Usage: zjump query [OPTIONS] [keywords...]
+
+Search the frecency database and print the best-matching directory.
+With --list, print all matching directories. With --interactive,
+select via fzf.
+
+Flags:
+    -a, --all             List all matches, including nonexistent paths
+    -i, --interactive     Select a directory interactively via fzf
+    -l, --list            List all matching directories
+    -s, --score           Print the frecency score alongside the path
+    --exclude PATH        Exclude a specific path from results
+    --base-dir DIR        Restrict results to paths under a base directory
+`
+
 // runQuery implements `zjump query`. Per deviation D-4 the DB is rewritten only
 // when the query actually dirtied it (a lazy deletion), unlike zoxide's
 // unconditional rewrite; the query result and the (conditional) save both run,
@@ -34,6 +49,10 @@ func runQuery(args []string) error {
 
 	keywords, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "query", queryHelp)
+			return nil
+		}
 		return err
 	}
 

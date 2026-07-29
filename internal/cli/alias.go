@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -12,6 +13,18 @@ import (
 	"github.com/primissus/zjump/internal/paths"
 )
 
+const aliasHelp = `Usage: zjump alias [options] [<name> <dir>]
+
+List, create, or delete directory aliases.
+
+With no arguments, list all aliases (name<tab>path per line).
+With <name> <dir>, create or update an alias.
+With --delete <name>, remove an alias.
+
+Flags:
+    -d, --delete NAME   Delete an alias by name
+`
+
 // runAlias implements `zjump alias`. With no args it lists; with a name and
 // directory it creates/overwrites; with -d/--delete it removes.
 func runAlias(args []string) error {
@@ -22,6 +35,10 @@ func runAlias(args []string) error {
 
 	rest, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "alias", aliasHelp)
+			return nil
+		}
 		return err
 	}
 

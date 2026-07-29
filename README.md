@@ -131,7 +131,7 @@ The `zjump` binary exposes nine subcommands. In everyday use you'll rarely call
 them directly — the `zz`/`zzi` shell functions and the tracking hook do it for you
 — but the full surface is documented here.
 
-Global flags: `-h`/`--help`, `-V`/`--version`.
+Global flags: `-h`/`--help`, `-V`/`--version`. Every subcommand also accepts `-h`/`--help` and prints its own usage with flags.
 
 ### `zjump add <paths>...`
 

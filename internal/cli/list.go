@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -28,6 +29,22 @@ import (
 // Per deviation D-4 the DB is rewritten only when actually dirty: lazy
 // deletions during Stream iteration may set dirty, and the unconditional
 // database.Save() at the end is a no-op when clean (mirrors query.go:65).
+const listHelp = `Usage: zjump list [OPTIONS] [keywords...]
+
+List directories (zoxide-like) plus opt-in sections for aliases,
+branches, and worktrees. This is a zjump-only extension.
+
+Flags:
+    -a, --all             Include nonexistent paths
+    -s, --score           Print the frecency score alongside the path
+    --json                Output in JSON format
+    --aliases             Include the ALIASES section
+    --branches            Include the BRANCHES section
+    --worktrees           Include the WORKTREES section
+    --all-repos           Scan all repos from the database for branches/worktrees
+    --no-dirs             Suppress the DIRECTORIES section
+`
+
 func runList(args []string) error {
 	fs := newFlagSet("list")
 	var all, score, jsonOut, allRepos bool
@@ -46,6 +63,10 @@ func runList(args []string) error {
 
 	keywords, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "list", listHelp)
+			return nil
+		}
 		return err
 	}
 

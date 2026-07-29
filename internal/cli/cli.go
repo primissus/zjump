@@ -19,7 +19,7 @@ import (
 )
 
 // Version is zjump's version string.
-const Version = "0.3.0"
+const Version = "0.4.0"
 
 // Run dispatches a subcommand. It returns nil on success, an errs.SilentExit to
 // stop with a specific code and no message, or a normal error (printed by main
@@ -182,6 +182,17 @@ Run 'zjump <COMMAND> --help' for command-specific options.
 
 Environment variables:
     _ZJUMP_DATA_DIR            Directory for zjump's database file
+    _ZJUMP_ECHO                Print the matched directory before navigating (=1)
+    _ZJUMP_EXCLUDE_DIRS        Directory globs excluded from tracking
+    _ZJUMP_FZF_OPTS            Custom flags passed to fzf (query -i only)
+    _ZJUMP_MAXAGE              Aging ceiling for the total rank (default 10000)
+    _ZJUMP_RESOLVE_SYMLINKS    Resolve symlinks when storing paths (=1)
+`)
+}
+
+func printCmdHelp(w io.Writer, name, cmdUsage string) {
+	fmt.Fprintf(w, "zjump %s — %s\n\n%s\n\nEnvironment variables:\n", Version, name, cmdUsage)
+	fmt.Fprint(w, `    _ZJUMP_DATA_DIR            Directory for zjump's database file
     _ZJUMP_ECHO                Print the matched directory before navigating (=1)
     _ZJUMP_EXCLUDE_DIRS        Directory globs excluded from tracking
     _ZJUMP_FZF_OPTS            Custom flags passed to fzf (query -i only)

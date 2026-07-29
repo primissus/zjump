@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -8,6 +9,18 @@ import (
 	"github.com/primissus/zjump/internal/errs"
 	"github.com/primissus/zjump/internal/shell"
 )
+
+const initHelp = `Usage: zjump init [OPTIONS] <bash|zsh>
+
+Generate and print the shell integration script. Pipe or eval
+the output in your shell's rc file.
+
+Flags:
+    --cmd NAME          Shell command name (default: zz)
+    --no-cmd            Do not define any shell command
+    --no-aliases        Alias for --no-cmd
+    --hook HOOK         Hook mode: none, prompt, pwd (default: pwd)
+`
 
 // runInit implements `zjump init <shell>`. Only zsh and bash are supported
 // (R-INIT-1); any other shell is rejected. Mirrors cmd/init.rs.
@@ -23,6 +36,10 @@ func runInit(args []string) error {
 
 	rest, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "init", initHelp)
+			return nil
+		}
 		return err
 	}
 	if len(rest) != 1 {

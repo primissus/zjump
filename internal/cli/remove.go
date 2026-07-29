@@ -1,10 +1,18 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
+	"os"
 
 	"github.com/primissus/zjump/internal/paths"
 )
+
+const removeHelp = `Usage: zjump remove <paths>...
+
+Remove one or more directories from the frecency database.
+Each path is matched exactly first, then by lexical resolution.
+`
 
 // runRemove implements `zjump remove`. It never reads the clock, so it has no
 // clock-error case (R-ERR-4). For each path it tries an exact match, then a
@@ -13,6 +21,10 @@ func runRemove(args []string) error {
 	fs := newFlagSet("remove")
 	targets, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "remove", removeHelp)
+			return nil
+		}
 		return err
 	}
 
