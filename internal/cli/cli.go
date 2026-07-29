@@ -57,6 +57,8 @@ func Run(args []string) error {
 		return runBranch(rest[1:])
 	case "worktree":
 		return runWorktree(rest[1:])
+	case "list":
+		return runList(rest[1:])
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return nil
@@ -173,6 +175,8 @@ Commands:
     alias [<name> <dir>]      List, create, or delete directory aliases
     branch <name> [repo...]   Print the worktree path for a checked-out branch
     worktree <name> [repo...] Print a worktree path by name or branch
+    list                       List directories (zoxide-like) plus opt-in aliases,
+                              branches, and worktrees sections
 
 Run 'zjump <COMMAND> --help' for command-specific options.
 

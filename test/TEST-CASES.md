@@ -95,6 +95,34 @@ Based on `~/src/git-interact`, `~/src/loftia`, `~/src/vegapunk`.
 
 ---
 
+## 6. `zjump list` overview (zjump-only extension)
+
+`zjump list` is not a jump — it's a combined view of the four tracked entities.
+There is no zoxide equivalent; zoxide's closest behavior is `zoxide query --list`
+(a flag, not a subcommand). See [`REQUIREMENTS.md` §2.13](../REQUIREMENTS.md) for
+the full `R-LIST-*` requirements.
+
+| ID | Scenario | Command | Expected |
+|---|---|---|---|
+| L-01 | Bare list ≈ `query --list` | `zjump list` | DIRECTORIES section only, best-first, PATH column; ALIASES/BRANCHES/WORKTREES absent |
+| L-02 | Score column opt-in | `zjump list --score` | DIRECTORIES gains a SCORE column with `%6.1f` formatting (clamped to `9999.0`) |
+| L-03 | Empty DB | `zjump list` (fresh DB) | DIRECTORIES header + a single `(none)` row |
+| L-04 | Add ALIASES section | `zjump list --aliases` | DIRECTORIES + ALIASES sections both printed, separated by a blank line |
+| L-05 | Empty requested section | `zjump list --aliases` (no aliases configured) | ALIASES header + `(none)` row (NOT omitted — distinguishes "asked for, none" from "suppressed") |
+| L-06 | Suppress DIRECTORIES | `zjump list --aliases --no-dirs` | Only the ALIASES section appears; DIRECTORIES header absent entirely |
+| L-07 | Add BRANCHES (CWD repo) | `cd ~/src/zjump && zjump list --branches` | BRANCHES header carries `(repo: ~/src/zjump)` hint; columns are BRANCH/PATH (no REPO column) |
+| L-08 | Add WORKTREES (CWD repo) | `cd ~/src/zjump && zjump list --worktrees` | WORKTREES header carries repo hint; columns are BASENAME/BRANCH/PATH; detached worktrees labeled `(detached)` |
+| L-09 | Out-of-repo, no keywords | `cd /tmp && zjump list --branches --worktrees` | Section headers print with `(no git repository)` marker + `(none)` body (NOT an error) |
+| L-10 | Repo via DB keywords | `zjump list --branches zjump` | Best DB match for "zjump" → `git.RepoRoot` → BRANCHES of that repo; errors `no match found for repo` if no DB hit (mirrors `zjump branch`) |
+| L-11 | All-repos scan | `zjump list --branches --worktrees --all-repos` | Scans every DB entry containing `.git`; BRANCHES/WORKTREES gain a REPO leading column; dedups by canonical main-checkout path |
+| L-12 | JSON output, minimal | `zjump list --json` | JSON object with `directories` key only; other section keys absent (omitempty) |
+| L-13 | JSON output, requested-empty | `zjump list --json --aliases` (no aliases) | `aliases: []` present (NOT `null`); consumers can distinguish "asked for, none" from "not requested" |
+| L-14 | JSON output, all sections | `zjump list --json --aliases --branches --worktrees` | All four keys present; row objects carry documented field names |
+| L-15 | D-4: clean listing no rewrite | `stat db` before & after `zjump list` | File mtime unchanged when no lazy-deletions fire (Save is a no-op when not dirty) |
+| L-16 | Broken pipe | `zjump list \| head -1` | Silent exit 0 (same pipe-tolerance as `query --list`) |
+
+---
+
 ## Quick smoke test
 
 One-liner to seed the DB and verify all four jump types work end-to-end:
@@ -119,4 +147,7 @@ zz -b p11-branch-view   # → ~/src/git-interact-p11
 # 4. Worktree (from loftia repo CWD)
 cd ~/src/loftia
 zz -w loftia-worktree   # → ~/src/loftia-worktree
+
+# 5. Combined overview (zjump-only — no zoxide equivalent)
+zjump list --score --aliases --branches --worktrees
 ```

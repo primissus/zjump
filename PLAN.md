@@ -289,3 +289,33 @@ duplication between the DB and alias store.
 
 See [`REQUIREMENTS.md` §2.11–§2.12](./REQUIREMENTS.md) for the full `R-ALS-*`
 and `R-GIT-*` requirements.
+
+---
+
+## 10. Phase 7 — `zjump list` combined overview (2026-07-28 extension)
+
+Beyond zoxide parity and the Phase 6 extensions. Adds a new zjump-only
+subcommand for a unified view of everything zjump tracks.
+
+- **`zjump list [keywords]...`** (new subcommand, no zoxide equivalent) prints
+  the DIRECTORIES section by default (zoxide-`query --list`-like), plus opt-in
+  ALIASES, BRANCHES, and WORKTREES sections via `--aliases` / `--branches` /
+  `--worktrees`. `--no-dirs` suppresses the always-on DIRECTORIES section.
+- **Score column** opt-in via `-s, --score` (mirrors `query --score`'s
+  `%6.1f` clamped formatting). **All-mode** `--all` preserves zoxide's
+  `query --all` semantics.
+- **Repo scope for the git sections** mirrors `zjump branch`/`worktree`:
+  default `git.RepoRoot($PWD)`, override via positional `[repo-keywords]`
+  resolved through the frecency DB; out-of-repo + no keywords → empty section
+  with `(none)` body and no error. `--all-repos` switches to a DB-wide scan
+  with a REPO leading column, deduplicated by canonical main-checkout path.
+- **Structured output** via `--json`: `directories` always present (may be
+  `[]`), other sections `omitempty` by request; requested-but-empty sections
+  serialize as `[]` (not `null`) for downstream disambiguation.
+- **D-4 preserved**: `database.Save()` runs unconditionally after iteration
+  but is a no-op when nothing was lazy-deleted; a pure listing triggers no
+  file rewrite.
+
+See [`REQUIREMENTS.md` §2.13](./REQUIREMENTS.md) for the full `R-LIST-*`
+requirements and [`test/TEST-CASES.md` §6](./test/TEST-CASES.md) for the
+`L-01..L-16` test scenarios.

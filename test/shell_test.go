@@ -220,7 +220,7 @@ zz proj >/dev/null 2>&1; echo "alias_jump=$(pwd)"
 	}
 }
 
-// requireBin is defined above; add runIn for directory-aware exec.  
+// requireBin is defined above; add runIn for directory-aware exec.
 // runIn executes zjump with args under the given working directory.
 func runIn(t *testing.T, dataDir, wd string, extraEnv []string, args ...string) result {
 	t.Helper()
@@ -342,5 +342,116 @@ func TestGitBranchWorktree(t *testing.T) {
 	}
 	if !strings.Contains(r.stderr, "no worktree found") {
 		t.Errorf("worktree miss error = %q", r.stderr)
+	}
+}
+
+// TestListBranchesWorktrees exercises `zjump list --branches`, `--worktrees`,
+// and `--all-repos` against a real git repo. Mirrors TestGitBranchWorktree
+// setup; gated shelltests build tag + requireBin("git") keeps the default
+// `go test ./...` path dependency-free.
+func TestListBranchesWorktrees(t *testing.T) {
+	requireBin(t, "git")
+	data := t.TempDir()
+	base := t.TempDir()
+
+	mustGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %s\n%s", args, err, out)
+		}
+	}
+
+	// Create a normal repo with a main branch.
+	mainWT := filepath.Join(base, "main")
+	os.MkdirAll(mainWT, 0o755)
+	mustGit("-C", mainWT, "init", "-b", "main")
+	mustGit("-C", mainWT, "config", "user.email", "test@test.local")
+	mustGit("-C", mainWT, "config", "user.name", "Test")
+	mustGit("-C", mainWT, "commit", "--allow-empty", "-m", "init")
+
+	// Add a feature worktree off the main repo.
+	featWT := filepath.Join(base, "feature-x")
+	mustGit("-C", mainWT, "worktree", "add", featWT, "-b", "feature/x")
+
+	resolve := func(p string) string {
+		r, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			t.Fatalf("resolve %s: %v", p, err)
+		}
+		return r
+	}
+	mainResolved := resolve(mainWT)
+	featResolved := resolve(featWT)
+
+	// Add repo paths to DB so --all-repos has something to scan.
+	run(t, data, nil, "add", mainResolved)
+	run(t, data, nil, "add", featResolved)
+
+	// `zjump list --branches` from mainWT resolves via CWD and emits both
+	// the main and feature branches (no REPO column).
+	r := runIn(t, data, mainWT, nil, "list", "--branches")
+	if r.code != 0 {
+		t.Fatalf("list --branches: %s", r.stderr)
+	}
+	out := r.stdout
+	if !strings.Contains(out, "BRANCHES (repo:") {
+		t.Errorf("missing BRANCHES header with repo hint:\n%s", out)
+	}
+	if !strings.Contains(out, "main") || !strings.Contains(out, "feature/x") {
+		t.Errorf("missing branch rows:\n%s", out)
+	}
+	if strings.Contains(out, "REPO") {
+		t.Errorf("single-repo --branches should not include REPO column:\n%s", out)
+	}
+
+	// `zjump list --worktrees` (no CWD repo): we run from a fresh temp dir
+	// (outside any git repo), so the section header should report "(no git
+	// repository)" and the body should be "(none)". This asserts the
+	// CWD-fallback skip does NOT print a broken-section header.
+	nonRepoDir := t.TempDir() // outside any git repo
+	r = runIn(t, data, nonRepoDir, nil, "list", "--worktrees")
+	if r.code != 0 {
+		t.Fatalf("list --worktrees: %s", r.stderr)
+	}
+	out = r.stdout
+	if !strings.Contains(out, "WORKTREES (no git repository)") {
+		t.Errorf("expected WORKTREES header with '(no git repository)' marker:\n%s", out)
+	}
+	if !strings.Contains(out, "(none)") {
+		t.Errorf("expected (none) body when CWD is not a repo:\n%s", out)
+	}
+
+	// `zjump list --worktrees` from mainWT: CWD repo, expect both worktrees.
+	r = runIn(t, data, mainWT, nil, "list", "--worktrees")
+	if r.code != 0 {
+		t.Fatalf("list --worktrees in repo: %s", r.stderr)
+	}
+	out = r.stdout
+	if !strings.Contains(out, "WORKTREES (repo:") {
+		t.Errorf("missing WORKTREES header with repo hint:\n%s", out)
+	}
+	if !strings.Contains(out, filepath.Base(mainResolved)) || !strings.Contains(out, filepath.Base(featResolved)) {
+		t.Errorf("missing worktree basenames:\n%s", out)
+	}
+
+	// `zjump list --branches --worktrees --all-repos`: column headers must
+	// include REPO (in both sections) since --all-repos was requested.
+	r = run(t, data, nil, "list", "--branches", "--worktrees", "--all-repos")
+	if r.code != 0 {
+		t.Fatalf("list --all-repos: %s", r.stderr)
+	}
+	out = r.stdout
+	if !strings.Contains(out, "BRANCHES (all repos in DB)") {
+		t.Errorf("missing all-repos BRANCHES header:\n%s", out)
+	}
+	if !strings.Contains(out, "WORKTREES (all repos in DB)") {
+		t.Errorf("missing all-repos WORKTREES header:\n%s", out)
+	}
+	// Each section's row data should still be present, sorted under the
+	// canonical REPO column (resolved via git's symlink canonicalization).
+	if !strings.Contains(out, mainResolved) {
+		t.Errorf("missing main resolved path:\n%s", out)
 	}
 }

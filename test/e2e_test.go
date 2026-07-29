@@ -5,6 +5,7 @@
 package e2e
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -496,5 +497,160 @@ func TestAliasSpecialCharacters(t *testing.T) {
 				t.Errorf("prefix %q -> %q = %q, want %q", tc.prefix, tc.name, out, target)
 			}
 		})
+	}
+}
+
+// TestListDefault verifies `zjump list` (no flags) prints the DIRECTORIES
+// section only, best-first, with a (none) row or the directory paths. The
+// git-only sections (ALIASES/BRANCHES/WORKTREES) must be absent by default.
+func TestListDefault(t *testing.T) {
+	data := t.TempDir()
+	root := t.TempDir()
+	a := filepath.Join(root, "aaa")
+	b := filepath.Join(root, "bbb")
+	os.MkdirAll(a, 0o755)
+	os.MkdirAll(b, 0o755)
+	run(t, data, nil, "add", b) // b visited once
+	run(t, data, nil, "add", a) // a visited twice (rank=2)
+	run(t, data, nil, "add", a)
+
+	out := run(t, data, nil, "list").stdout
+	if !strings.Contains(out, "DIRECTORIES") {
+		t.Errorf("missing DIRECTORIES header:\n%s", out)
+	}
+	if !strings.Contains(out, a) || !strings.Contains(out, b) {
+		t.Errorf("missing directory rows:\n%s", out)
+	}
+	// Best-first: a should appear BEFORE b. Best-first is guaranteed by
+	// db.Stream sorting (NewStream calls SortByScore).
+	if idxA, idxB := strings.Index(out, a), strings.Index(out, b); idxA > idxB {
+		t.Errorf("listing not best-first (a at %d, b at %d):\n%s", idxA, idxB, out)
+	}
+	for _, absent := range []string{"ALIASES", "BRANCHES", "WORKTREES"} {
+		if strings.Contains(out, absent) {
+			t.Errorf("section %s should not appear by default:\n%s", absent, out)
+		}
+	}
+}
+
+// TestListScore verifies `--score` adds a SCORE column with the %6.1f
+// formatting familiar from `query --score`.
+func TestListScore(t *testing.T) {
+	data := t.TempDir()
+	x := filepath.Join(t.TempDir(), "x")
+	os.MkdirAll(x, 0o755)
+	run(t, data, nil, "add", x)
+
+	out := run(t, data, nil, "list", "--score").stdout
+	if !strings.Contains(out, "SCORE") {
+		t.Errorf("missing SCORE column header:\n%s", out)
+	}
+	// Freshly added → <1h bucket → score = 4.0 (R-MATCH-4).
+	if !strings.Contains(out, "   4.0") {
+		t.Errorf("missing 6.1f-formatted score in:\n%s", out)
+	}
+}
+
+// TestListEmpty verifies a fresh DB shows the DIRECTORIES header plus a
+// "(none)" row instead of a blank body.
+func TestListEmpty(t *testing.T) {
+	data := t.TempDir()
+	out := run(t, data, nil, "list").stdout
+	if !strings.Contains(out, "DIRECTORIES") || !strings.Contains(out, "(none)") {
+		t.Errorf("empty list should print DIRECTORIES header + (none) row:\n%s", out)
+	}
+}
+
+// TestListAliases verifies `--aliases` opts in the ALIASES section. Bare `list`
+// (without --aliases) must NOT print it.
+func TestListAliases(t *testing.T) {
+	data := t.TempDir()
+	target := filepath.Join(t.TempDir(), "aliastarget")
+	os.MkdirAll(target, 0o755)
+	run(t, data, nil, "alias", "proj", target)
+
+	// Bare list: no ALIASES section.
+	if out := run(t, data, nil, "list").stdout; strings.Contains(out, "ALIASES") {
+		t.Errorf("bare list should not show ALIASES:\n%s", out)
+	}
+	// With --aliases: section present with the entry.
+	out := run(t, data, nil, "list", "--aliases").stdout
+	if !strings.Contains(out, "ALIASES") || !strings.Contains(out, "proj") || !strings.Contains(out, target) {
+		t.Errorf("list --aliases missing entry:\n%s", out)
+	}
+}
+
+// TestListAliasesEmpty verifies `--aliases` with no configured aliases still
+// prints the header + "(none)" row — distinguishing "asked for, none
+// configured" from a suppressed section.
+func TestListAliasesEmpty(t *testing.T) {
+	data := t.TempDir()
+	out := run(t, data, nil, "list", "--aliases").stdout
+	if !strings.Contains(out, "ALIASES") || !strings.Contains(out, "(none)") {
+		t.Errorf("list --aliases with no aliases should print ALIASES header + (none):\n%s", out)
+	}
+}
+
+// TestListNoDirs verifies `--no-dirs` suppresses the DIRECTORIES section while
+// the opt-in ALIASES section still renders.
+func TestListNoDirs(t *testing.T) {
+	data := t.TempDir()
+	root := t.TempDir()
+	x := filepath.Join(root, "x")
+	os.MkdirAll(x, 0o755)
+	run(t, data, nil, "add", x)
+
+	target := filepath.Join(t.TempDir(), "aliastarget")
+	os.MkdirAll(target, 0o755)
+	run(t, data, nil, "alias", "k", target)
+
+	out := run(t, data, nil, "list", "--aliases", "--no-dirs").stdout
+	if strings.Contains(out, "DIRECTORIES") {
+		t.Errorf("--no-dirs should suppress DIRECTORIES:\n%s", out)
+	}
+	if !strings.Contains(out, "ALIASES") {
+		t.Errorf("ALIASES should still appear with --aliases:\n%s", out)
+	}
+}
+
+// TestListJSONMinimal verifies the JSON output is `{"directories":[...]}` and
+// omits unrequested section keys.
+func TestListJSONMinimal(t *testing.T) {
+	data := t.TempDir()
+	x := filepath.Join(t.TempDir(), "x")
+	os.MkdirAll(x, 0o755)
+	run(t, data, nil, "add", x)
+
+	out := run(t, data, nil, "list", "--json").stdout
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if _, ok := got["directories"]; !ok {
+		t.Errorf("missing `directories` key:\n%s", out)
+	}
+	for _, key := range []string{"aliases", "branches", "worktrees"} {
+		if raw, ok := got[key]; ok {
+			t.Errorf("unrequested key %q present as %s", key, string(raw))
+		}
+	}
+}
+
+// TestListJSONWithAliases verifies `--json --aliases` serializes the ALIASES
+// section as `[]` even when empty (mirrors the unit-test omitempty contract).
+func TestListJSONWithAliases(t *testing.T) {
+	data := t.TempDir()
+	out := run(t, data, nil, "list", "--json", "--aliases").stdout
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	raw, ok := got["aliases"]
+	if !ok {
+		t.Fatalf("missing `aliases` key (should always appear when requested):\n%s", out)
+	}
+	got2 := strings.TrimSpace(string(raw))
+	if got2 == "null" {
+		t.Errorf("aliases = null; want [] (requested-but-empty should be []):\n%s", out)
 	}
 }

@@ -17,10 +17,10 @@ zjump works on **bash** and **zsh** (Linux and macOS).
 
 > **Scope.** zjump implements broad behavioral parity with zoxide for the
 > `add`, `query`, `remove`, `init`, and `edit` commands. It also extends beyond
-> zoxide with directory aliases, git branch jumps, and git worktree jumps.
-> The `import` command, shells other than bash/zsh, and Windows are
-> **out of scope**; the database is a zjump-native format, not byte-compatible
-> with zoxide's `db.zo`. See
+> zoxide with directory aliases, git branch jumps, git worktree jumps, and a
+> combined `list` view of all three. The `import` command, shells other than
+> bash/zsh, and Windows are **out of scope**; the database is a zjump-native
+> format, not byte-compatible with zoxide's `db.zo`. See
 > [Deliberate deviations](#deliberate-deviations-from-zoxide).
 
 ## Getting started
@@ -127,7 +127,7 @@ Core `zz` jumping works without it.
 
 ## Commands
 
-The `zjump` binary exposes five subcommands. In everyday use you'll rarely call
+The `zjump` binary exposes nine subcommands. In everyday use you'll rarely call
 them directly — the `zz`/`zzi` shell functions and the tracking hook do it for you
 — but the full surface is documented here.
 
@@ -226,7 +226,40 @@ directory's repository is used. Never creates worktrees — read-only.
 
 Print a worktree path matching `<name>` by directory basename first, then by
 branch shortname. Multiple matches produce an ambiguity error. Repository
-resolution works the same as `branch`.<
+resolution works the same as `branch`.
+
+### `zjump list [keywords]...`
+
+List the tracked directories ("DIRECTORIES" section by default) plus optional
+sections for aliases, branches, and worktrees. This is a zjump-only extension
+with **no zoxide equivalent** — zoxide's closest behavior is `zoxide query
+--list` (a flag, not a subcommand), and the git sections have no analog at all.
+
+| Flag | Description |
+| --- | --- |
+| `[keywords]...` | Substrings to filter the DIRECTORIES section (same [matching rules](#matching) as `query`). When `--branches`/`--worktrees` are set, they double as repo-keywords (best DB match wins, mirroring `branch`). |
+| `-s`, `--score` | Add a SCORE column to DIRECTORIES (`%6.1f`, clamped to `9999.0`) — same formatting as `query --score`. |
+| `-a`, `--all` | Include directories that no longer exist (disables the existence filter) — zoxide's `query --all` semantics. |
+| `--aliases` | Add an ALIASES section (sorted by name). |
+| `--branches` | Add a BRANCHES section. Repo defaults to `git.RepoRoot($PWD)`; keywords override. Detached worktrees are excluded. |
+| `--worktrees` | Add a WORKTREES section. Same repo resolution as `--branches`. Includes detached worktrees (labelled `(detached)`). |
+| `--no-dirs` | Suppress the DIRECTORIES section. Combine with `--aliases`/`--branches`/`--worktrees` to print only those. |
+| `--all-repos` | Scan every DB entry containing a `.git` and enumerate worktrees across all distinct repos. Adds a REPO leading column to the BRANCHES/WORKTREES sections; deduplicates by canonical main-checkout path. |
+| `--json` | Emit a structured JSON object instead of the pretty text table. `directories` is always present (may be `[]`); the optional sections appear **only when requested**, as `[]` (not `null`) even when empty. |
+
+- Bare `zjump list` ≈ `zjump query --list`: a single DIRECTORIES section,
+  best-first, with a PATH column. ALIASES/BRANCHES/WORKTREES are absent by
+  default; pass `--aliases`, `--branches`, `--worktrees` to opt them in.
+- Empty requested sections print their header + a single `(none)` row so you
+  can distinguish "asked for, none configured" from a suppressed section.
+- If CWD isn't a Git repository and no `[keywords]` are given, BRANCHES /
+  WORKTREES print their header + `(none)` without erroring — `[keywords]`
+  force repo resolution via the frecency database and error on no match (same
+  behavior as `zjump branch`/`zjump worktree` with keywords).
+- `list` follows deviation **D-4**: the database file is rewritten after the
+  listing **only when** lazy deletions during `db.Stream.Next()` actually
+  dirtied it. A pure listing (no stale or excluded entries purged) performs
+  no file rewrite.
 
 ## Configuration
 

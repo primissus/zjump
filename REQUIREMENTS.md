@@ -280,6 +280,50 @@ one-for-one:
   (format: `basename (branch)`). Selecting one jumps to it. Same single-offer
   fast path and out-of-repo DB-fallback as R-GIT-7.
 
+### 2.13 `list` — combined directory/alias/branch/worktree overview
+
+`zjump list` is a zjump-only extension subcommand with **no zoxide equivalent**
+— zoxide's closest behavior is `zoxide query --list` (a flag, not a subcommand),
+and the git sections have no analog at all. Recorded as `R-LIST-*` here and
+mirrored in DESIGN.md §13.6.
+
+- **R-LIST-1** Bare `zjump list` ≈ `zjump query --list`: prints a single
+  DIRECTORIES section, best-first, with PATH column. The ALIASES, BRANCHES,
+  and WORKTREES sections are **absent** in default mode.
+- **R-LIST-2** Section toggles are additive: `--aliases`, `--branches`,
+  `--worktrees` opt in the corresponding sections; `--no-dirs` suppresses
+  DIRECTORIES. Empty requested sections print their header plus a single
+  `(none)` row so users can distinguish "asked for, none configured" from a
+  suppressed section. Unrequested sections are omitted entirely.
+- **R-LIST-3** `-s, --score` adds a SCORE column to DIRECTORIES, formatted
+  `%6.1f` after clamping the frecency score to `[0.0, 9999.0]` — identical to
+  `query --score` (`Dir.DisplayScore`, R-MATCH-4).
+- **R-LIST-4** `-a, --all` keeps zoxide semper on DIRECTORIES: disables the
+  filesystem-existence filter and the lazy-deletion TTL pass (R-QRY-6 /
+  R-QRY-10). Lazy deletion of excluded entries (`_ZJUMP_EXCLUDE_DIRS` glob
+  matches) is unchanged.
+- **R-LIST-5** Repo scope for BRANCHES/WORKTREES: when no keywords are
+  passed, defaults to `git.RepoRoot($PWD)` (R-GIT-3); keywords override
+  via `db.Stream` top match. If CWD isn't a repo and no keywords are given,
+  the git sections print their header + `(none)` without erroring.
+- **R-LIST-6** `--all-repos` switches the BRANCHES/WORKTREES sections to
+  scan every DB entry containing a `.git` and enumerate worktrees across all
+  distinct repos. A REPO leading column is added in this mode, deduplicated
+  by the canonical main-checkout path returned by `git worktree list
+  --porcelain`. `directories` is still filtered by positionals; `--all-repos`
+  combined with positionals restricts the candidate set, it does not error.
+- **R-LIST-7** `--json` switches output to a structured JSON object:
+  `directories` is always present (may be `[]`); `aliases`/`branches`/
+  `worktrees` are present **iff** requested (omitempty); a requested-but-
+  empty section serializes as `[]` (not `null`). All rows carry the same
+  field names as the in-memory types (`path`, `rank`, `last_accessed`,
+  `score`, `name`, `branch`, `basename`, `detached`, `repo`).
+- **R-LIST-8** `list` follows deviation **D-4**: it calls
+  `database.Save()` unconditionally after iteration, but `Save` is a no-op
+  when the iteration did not dirty the DB. Lazy deletions of stale/excluded
+  entries during `db.Stream.Next()` (R-QRY-10) persist as usual; a pure
+  listing with no deletions triggers no DB rewrite.
+
 ---
 
 ## 3. Out of scope (explicit non-goals for this effort)
