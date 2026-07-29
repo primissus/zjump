@@ -413,3 +413,88 @@ func TestAliasOverwrite(t *testing.T) {
 		t.Errorf("alias overwrite: query = %q, want %q", out, new)
 	}
 }
+
+func TestAliasPrefixMatch(t *testing.T) {
+	data := t.TempDir()
+	target1 := filepath.Join(t.TempDir(), "docs-web-app")
+	target2 := filepath.Join(t.TempDir(), "proj-dir")
+	os.MkdirAll(target1, 0o755)
+	os.MkdirAll(target2, 0o755)
+
+	// Create aliases.
+	run(t, data, nil, "alias", "punk-records", target1)
+	run(t, data, nil, "alias", "proj", target2)
+
+	// Unique prefix match.
+	out := strings.TrimSpace(run(t, data, nil, "query", "punk-").stdout)
+	if out != target1 {
+		t.Errorf("prefix match 'punk-' = %q, want %q", out, target1)
+	}
+
+	// Exact match still works.
+	out = strings.TrimSpace(run(t, data, nil, "query", "proj").stdout)
+	if out != target2 {
+		t.Errorf("exact match 'proj' = %q, want %q", out, target2)
+	}
+
+	// Hyphenated alias name with period prefix.
+	run(t, data, nil, "alias", ".my-test", target1)
+	out = strings.TrimSpace(run(t, data, nil, "query", ".my-").stdout)
+	if out != target1 {
+		t.Errorf("prefix match '.my-' = %q, want %q", out, target1)
+	}
+
+	// Ambiguous prefix falls through to frecency (no DB entries → no match).
+	r := run(t, data, nil, "query", "p")
+	if r.code == 0 || !strings.Contains(r.stderr, "no match found") {
+		t.Errorf("ambiguous prefix 'p': expected 'no match found', got code=%d stderr=%q", r.code, r.stderr)
+	}
+}
+
+func TestAliasRejectsLeadingDash(t *testing.T) {
+	data := t.TempDir()
+	target := filepath.Join(t.TempDir(), "target")
+	os.MkdirAll(target, 0o755)
+
+	r := run(t, data, nil, "alias", "-badname", target)
+	if r.code == 0 {
+		t.Fatal("alias with leading dash should be rejected")
+	}
+	if !strings.Contains(r.stderr, "flag provided but not defined") {
+		t.Errorf("error = %q, want flag parsing rejection", r.stderr)
+	}
+}
+
+func TestAliasSpecialCharacters(t *testing.T) {
+	data := t.TempDir()
+	target := filepath.Join(t.TempDir(), "target")
+	os.MkdirAll(target, 0o755)
+
+	tests := []struct {
+		name   string
+		prefix string
+	}{
+		{"_test", "_"},
+		{".hidden", ".hi"},
+		{"123abc", "123"},
+		{"{braces}", "{b"},
+		{"[test]", "[t"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			run(t, data, nil, "alias", tc.name, target)
+
+			// Exact match.
+			out := strings.TrimSpace(run(t, data, nil, "query", tc.name).stdout)
+			if out != target {
+				t.Errorf("exact %q = %q, want %q", tc.name, out, target)
+			}
+
+			// Prefix match.
+			out = strings.TrimSpace(run(t, data, nil, "query", tc.prefix).stdout)
+			if out != target {
+				t.Errorf("prefix %q -> %q = %q, want %q", tc.prefix, tc.name, out, target)
+			}
+		})
+	}
+}

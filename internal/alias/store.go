@@ -61,6 +61,28 @@ func (s *Store) Get(name string) (string, bool) {
 	return p, ok
 }
 
+// Match resolves name via exact match, then prefix fallback. Returns the
+// matched path and true if exactly one alias matches; returns "", false if
+// no match or ambiguous (multiple prefix matches). Exact match always wins.
+func (s *Store) Match(name string) (string, bool) {
+	if p, ok := s.entries[name]; ok {
+		return p, true
+	}
+	var match string
+	for aliasName, aliasPath := range s.entries {
+		if len(aliasName) >= len(name) && aliasName[:len(name)] == name {
+			if match != "" {
+				return "", false
+			}
+			match = aliasPath
+		}
+	}
+	if match != "" {
+		return match, true
+	}
+	return "", false
+}
+
 // Set creates or overwrites an entry for name. It is the caller's responsibility
 // to validate the name format and that the path exists as a directory.
 func (s *Store) Set(name, path string) {

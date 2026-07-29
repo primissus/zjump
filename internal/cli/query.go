@@ -83,9 +83,9 @@ type queryParams struct {
 
 func doQuery(database *db.Database, p queryParams) error {
 	// Alias resolution: in default mode only (not --list/--interactive), if
-	// there is exactly one keyword and it exactly matches an alias, resolve it
-	// directly. Alias beats frecency but does not affect --list or --interactive
-	// modes (which stay pure frecency).
+	// there is exactly one keyword and it matches an alias (exact match first,
+	// then unique prefix match), resolve it directly. Alias beats frecency but
+	// does not affect --list or --interactive modes (which stay pure frecency).
 	if !p.interactive && !p.list && len(p.keywords) == 1 {
 		if resolved, aErr := resolveAlias(p.keywords[0], p); aErr != nil {
 			return aErr
@@ -226,9 +226,10 @@ func queryFzf() (*fzf.Child, error) {
 	return f.Spawn()
 }
 
-// resolveAlias checks whether keyword is an exact (case-sensitive) match for a
-// stored alias. Returns the target path if so, "" if no alias matches, or an
-// error if the alias target is missing on disk or equals --exclude.
+// resolveAlias checks whether keyword matches a stored alias (exact match
+// first, then unique prefix match). Returns the target path if so, "" if no
+// alias matches, or an error if the alias target is missing on disk or equals
+// --exclude.
 func resolveAlias(keyword string, p queryParams) (string, error) {
 	dataDir, err := config.DataDir()
 	if err != nil {
@@ -238,7 +239,7 @@ func resolveAlias(keyword string, p queryParams) (string, error) {
 	if aErr != nil {
 		return "", nil // file missing or corrupt: no aliases, fall through
 	}
-	target, ok := store.Get(keyword)
+	target, ok := store.Match(keyword)
 	if !ok {
 		return "", nil
 	}

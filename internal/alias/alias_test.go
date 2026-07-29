@@ -194,7 +194,7 @@ func TestStoreSetNoop(t *testing.T) {
 }
 
 func TestValidateName(t *testing.T) {
-	valid := []string{"foo", "my-proj", "api_2", "ABC"}
+	valid := []string{"foo", "my-proj", "api_2", "ABC", "_test", ".hidden", "123", "{test}", "[test]"}
 	for _, n := range valid {
 		if err := ValidateName(n); err != nil {
 			t.Errorf("ValidateName(%q) = %v, want nil", n, err)
@@ -212,5 +212,65 @@ func TestValidateName(t *testing.T) {
 		if err := ValidateName(n); err == nil {
 			t.Errorf("ValidateName(%q) (%s): expected error", n, desc)
 		}
+	}
+}
+
+func TestStoreMatch(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.Set("punk-records", "/docs-web-app")
+	s.Set("proj", "/src/zjump")
+	s.Set("proj-ext", "/src/ext")
+	s.Set("_test", "/tmp/underscore")
+	s.Set(".hidden", "/tmp/dotfile")
+	s.Set("{braces}", "/tmp/braces")
+
+	// Exact match wins.
+	p, ok := s.Match("proj")
+	if !ok || p != "/src/zjump" {
+		t.Errorf("Match(proj) = (%q, %v), want (/src/zjump, true)", p, ok)
+	}
+
+	// Unique prefix match.
+	p, ok = s.Match("punk-")
+	if !ok || p != "/docs-web-app" {
+		t.Errorf("Match(punk-) = (%q, %v), want (/docs-web-app, true)", p, ok)
+	}
+
+	p, ok = s.Match("_")
+	if !ok || p != "/tmp/underscore" {
+		t.Errorf("Match(_) = (%q, %v), want (/tmp/underscore, true)", p, ok)
+	}
+
+	p, ok = s.Match(".hid")
+	if !ok || p != "/tmp/dotfile" {
+		t.Errorf("Match(.hid) = (%q, %v), want (/tmp/dotfile, true)", p, ok)
+	}
+
+	p, ok = s.Match("{b")
+	if !ok || p != "/tmp/braces" {
+		t.Errorf("Match({b) = (%q, %v), want (/tmp/braces, true)", p, ok)
+	}
+
+	// Ambiguous prefix (matches both proj and proj-ext).
+	p, ok = s.Match("pro")
+	if ok {
+		t.Errorf("Match(pro) returned (%q, true), want (\"\", false) for ambiguous", p)
+	}
+
+	// No match.
+	p, ok = s.Match("nonexistent")
+	if ok {
+		t.Errorf("Match(nonexistent) returned (%q, true), want (\"\", false)", p)
+	}
+
+	// Exact match beats prefix: proj is an exact alias, proj-ext is a prefix match.
+	p, ok = s.Match("proj")
+	if !ok || p != "/src/zjump" {
+		t.Errorf("Match(proj) exact = (%q, %v), want (/src/zjump, true)", p, ok)
 	}
 }
