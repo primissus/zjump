@@ -323,6 +323,11 @@ called; the rest are read on each invocation.
     rescaled and pruned. Parsed as an unsigned integer. Default: `10000`.
 - **`_ZJUMP_RESOLVE_SYMLINKS`**
   - When set to `1`, symlinks are resolved before directories are added.
+- **`_ZJUMP_PICK_TOP`**
+  - The number of frecency-ranked git-worktree directories listed in the
+    database-fallback when `-b` / `-w` are called with no argument and the
+    current directory is not inside a git repository. Must be a positive
+    integer. Default: `10`.
 
 ## How it works
 

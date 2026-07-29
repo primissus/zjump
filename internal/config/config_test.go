@@ -123,3 +123,37 @@ func TestExcludeDirsInvalid(t *testing.T) {
 		t.Error("expected error on invalid glob in _ZJUMP_EXCLUDE_DIRS")
 	}
 }
+
+func TestPickTopDefault(t *testing.T) {
+	unsetenv(t, "_ZJUMP_PICK_TOP")
+	v, err := PickTop()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 10 {
+		t.Errorf("default picktop = %d, want 10", v)
+	}
+}
+
+func TestPickTopParse(t *testing.T) {
+	t.Setenv("_ZJUMP_PICK_TOP", "5")
+	v, err := PickTop()
+	if err != nil || v != 5 {
+		t.Errorf("PickTop(5) = %d, %v", v, err)
+	}
+}
+
+func TestPickTopInvalid(t *testing.T) {
+	t.Setenv("_ZJUMP_PICK_TOP", "notanumber")
+	if _, err := PickTop(); err == nil {
+		t.Error("expected error parsing non-integer picktop")
+	}
+	t.Setenv("_ZJUMP_PICK_TOP", "0")
+	if _, err := PickTop(); err == nil {
+		t.Error("expected error for zero picktop")
+	}
+	t.Setenv("_ZJUMP_PICK_TOP", "-3")
+	if _, err := PickTop(); err == nil {
+		t.Error("expected error for negative picktop")
+	}
+}

@@ -19,8 +19,6 @@ type gitEntry struct {
 	path  string
 }
 
-const gitPickTopN = 10
-
 func gitFzfPickAndPrint(entries []gitEntry) error {
 	if len(entries) == 0 {
 		return fmt.Errorf("no matches found")
@@ -148,7 +146,11 @@ func pickFromDBBranch() error {
 	}
 	defer database.Save()
 
-	entries, err := scanDBForWorktrees(database, gitPickTopN)
+	n, err := config.PickTop()
+	if err != nil {
+		return err
+	}
+	entries, err := scanDBForWorktrees(database, n)
 	if err != nil {
 		return err
 	}
@@ -165,7 +167,11 @@ func pickFromDBWorktree() error {
 	}
 	defer database.Save()
 
-	entries, err := scanDBForWorktrees(database, gitPickTopN)
+	n, err := config.PickTop()
+	if err != nil {
+		return err
+	}
+	entries, err := scanDBForWorktrees(database, n)
 	if err != nil {
 		return err
 	}

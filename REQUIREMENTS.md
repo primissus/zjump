@@ -192,7 +192,7 @@ Decisions locked with the user:
 ### 2.9 Environment variables
 
 Six variables, `_ZJUMP_*`-prefixed, mirroring zoxide's `_ZO_*` semantics
-one-for-one:
+one-for-one, plus one zjump-only extension:
 
 - **R-ENV-1** `_ZJUMP_DATA_DIR` — data directory for the DB file; must be an
   absolute path (validated unconditionally), else error.
@@ -206,6 +206,9 @@ one-for-one:
   float; default `10000`.
 - **R-ENV-6** `_ZJUMP_RESOLVE_SYMLINKS` — resolve symlinks in `add`/`query`;
   true only when the value is exactly `"1"`.
+- **R-ENV-7** `_ZJUMP_PICK_TOP` — top-N count for the git-worktree DB-fallback
+  used by `branch`/`worktree` when called without arguments and CWD is not inside
+  a git repository. Parsed as a positive integer; default `10`.
 
 ### 2.10 Process & error semantics
 

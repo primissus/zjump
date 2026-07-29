@@ -41,8 +41,8 @@ func runBranch(args []string) error {
 		}
 		return err
 	}
-	if len(rest) < 1 {
-		return runBranchPick(rest[1:]) // rest is empty, so repoKW=[]
+	if len(rest) == 0 {
+		return runBranchPick(nil)
 	}
 	branch := rest[0]
 	repoKW := rest[1:]

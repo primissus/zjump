@@ -39,8 +39,8 @@ func runWorktree(args []string) error {
 		}
 		return err
 	}
-	if len(rest) < 1 {
-		return runWorktreePick(rest[1:]) // rest is empty, so repoKW=[]
+	if len(rest) == 0 {
+		return runWorktreePick(nil)
 	}
 	name := rest[0]
 	repoKW := rest[1:]

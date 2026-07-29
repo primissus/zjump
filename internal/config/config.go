@@ -1,4 +1,4 @@
-// Package config reads and validates zjump's six _ZJUMP_* environment variables
+// Package config reads and validates zjump's _ZJUMP_* environment variables
 // and resolves the data directory. Each mirrors zoxide's _ZO_* semantics
 // one-for-one (REQUIREMENTS.md §2.9, D-2).
 package config
@@ -111,4 +111,22 @@ func Maxage() (float64, error) {
 		return 0, fmt.Errorf("unable to parse _ZJUMP_MAXAGE as integer: %s", v)
 	}
 	return float64(n), nil
+}
+
+// PickTop returns the top-N count for the git-worktree DB-fallback used by
+// `branch`/`worktree` when called without arguments and CWD is not inside a git
+// repository. Reads _ZJUMP_PICK_TOP; defaults to 10. Must be a positive integer.
+func PickTop() (int, error) {
+	v, ok := os.LookupEnv("_ZJUMP_PICK_TOP")
+	if !ok {
+		return 10, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("unable to parse _ZJUMP_PICK_TOP as integer: %s", v)
+	}
+	if n <= 0 {
+		return 0, fmt.Errorf("_ZJUMP_PICK_TOP must be a positive integer: %s", v)
+	}
+	return n, nil
 }

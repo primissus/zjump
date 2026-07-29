@@ -19,7 +19,7 @@ import (
 )
 
 // Version is zjump's version string.
-const Version = "0.4.0"
+const Version = "0.4.1"
 
 // Run dispatches a subcommand. It returns nil on success, an errs.SilentExit to
 // stop with a specific code and no message, or a normal error (printed by main
@@ -187,6 +187,8 @@ Environment variables:
     _ZJUMP_FZF_OPTS            Custom flags passed to fzf (query -i only)
     _ZJUMP_MAXAGE              Aging ceiling for the total rank (default 10000)
     _ZJUMP_RESOLVE_SYMLINKS    Resolve symlinks when storing paths (=1)
+    _ZJUMP_PICK_TOP            Top-N git-worktree DB entries listed when -b/-w
+                              has no arg and CWD is not in a repo (default 10)
 `)
 }
 
@@ -198,5 +200,7 @@ func printCmdHelp(w io.Writer, name, cmdUsage string) {
     _ZJUMP_FZF_OPTS            Custom flags passed to fzf (query -i only)
     _ZJUMP_MAXAGE              Aging ceiling for the total rank (default 10000)
     _ZJUMP_RESOLVE_SYMLINKS    Resolve symlinks when storing paths (=1)
+    _ZJUMP_PICK_TOP            Top-N git-worktree DB entries listed when -b/-w
+                              has no arg and CWD is not in a repo (default 10)
 `)
 }
