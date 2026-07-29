@@ -2,6 +2,10 @@
 
 # zjump
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![GitHub Release](https://img.shields.io/github/v/release/primissus/zjump)](https://github.com/primissus/zjump/releases)
+
 zjump is a **smarter cd command**, a Go reimplementation of
 [zoxide](https://github.com/ajeetdsouza/zoxide).
 
@@ -13,7 +17,9 @@ zjump works on **bash** and **zsh** (Linux and macOS).
 [Installation](#installation) •
 [Commands](#commands) •
 [Configuration](#configuration) •
-[How it works](#how-it-works)
+[How it works](#how-it-works) •
+[Development](#development) •
+[Contributing](#contributing)
 
 > **Scope.** zjump implements broad behavioral parity with zoxide for the
 > `add`, `query`, `remove`, `init`, and `edit` commands. It also extends beyond
@@ -414,10 +420,26 @@ go test ./...                     # fast, dependency-free test suite
 go test -tags shelltests ./...    # also run real bash/zsh/fzf integration tests
 ```
 
-See [`REQUIREMENTS.md`](./REQUIREMENTS.md) for the scope contract (stable `R-*`
-IDs), [`PLAN.md`](./PLAN.md) for the roadmap, and
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) / [`DESIGN.md`](./DESIGN.md) for the
-zoxide reference material zjump is built against.
+For the full development guide — environment setup, testing, linting, code
+conventions, debugging, and release workflow — see
+[`docs/development.md`](./docs/development.md). For a deep dive into zjump's
+internal architecture and package layout, see
+[`docs/architecture.md`](./docs/architecture.md).
+
+[`REQUIREMENTS.md`](./REQUIREMENTS.md) defines the scope contract (stable `R-*`
+IDs); [`PLAN.md`](./PLAN.md) tracks the roadmap;
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) / [`DESIGN.md`](./DESIGN.md) document the
+upstream zoxide reference material zjump is built against.
+
+## Contributing
+
+Contributions are welcome! See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for setup,
+conventions, scope discipline, and the pull-request process. Please open an
+issue first for anything outside the current scope.
+
+## License
+
+zjump is licensed under the [MIT License](./LICENSE).
 
 ## Credit
 
