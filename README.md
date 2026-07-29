@@ -287,6 +287,13 @@ When calling `zjump init`, the following flags are available:
   - Prevents zjump from defining the `zz` and `zzi` commands. The underlying
     functions remain available as `__zjump_z` and `__zjump_zi` if you want to
     wire them up yourself.
+- **`--debug[=PATH]`** (zjump-only addition beyond parity)
+  - Bake debug logging into the generated integration script. Every `zz`
+    and `zjump` subprocess invocation will write timestamped log lines
+    (including errors) to the given file.
+  - If `PATH` is omitted, logs go to a default location
+    (typically `/tmp/zjump-debug.log`).
+  - Resolved to an absolute path at init time.
 
 ### Environment variables
 

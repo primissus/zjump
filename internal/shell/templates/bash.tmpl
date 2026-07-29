@@ -16,6 +16,16 @@ function __zjump_cd() {
     \builtin cd -- "$@"{{ if .Echo }} && __zjump_pwd{{ end }}
 }
 
+# __zjump wraps \command zjump, optionally injecting --debug --log-file when
+# init was called with --debug[=PATH] (a zjump-only addition beyond parity).
+__zjump() {
+    {{- if .Debug }}
+    \command zjump --debug --log-file "{{ .DebugLogFile }}" "$@"
+    {{- else }}
+    \command zjump "$@"
+    {{- end }}
+}
+
 # =============================================================================
 #
 # Hook configuration for zjump.
@@ -26,7 +36,7 @@ function __zjump_cd() {
 function __zjump_hook() {
     \builtin local -r retval="$?"
     # shellcheck disable=SC2312
-    \command zjump add -- "$(__zjump_pwd)"
+    __zjump add -- "$(__zjump_pwd)"
     return "${retval}"
 }
 {{- else if eq .Hook "pwd" }}
@@ -38,7 +48,7 @@ function __zjump_hook() {
     pwd_tmp="$(__zjump_pwd)"
     if [[ ${__zjump_oldpwd} != "${pwd_tmp}" ]]; then
         __zjump_oldpwd="${pwd_tmp}"
-        \command zjump add -- "${__zjump_oldpwd}"
+        __zjump add -- "${__zjump_oldpwd}"
     fi
     return "${retval}"
 }
@@ -116,15 +126,15 @@ function __zjump_z() {
         __zjump_cd "$2"
     elif [[ $1 = "-a" || $1 = "--alias" ]]; then
         shift
-        \command zjump alias "$@"
+        __zjump alias "$@"
     elif [[ $1 = "-b" || $1 = "--branch" ]]; then
         shift
         \builtin local result
-        result="$(\command zjump branch "$@")" && __zjump_cd "${result}"
+        result="$(__zjump branch "$@")" && __zjump_cd "${result}"
     elif [[ $1 = "-w" || $1 = "--worktree" ]]; then
         shift
         \builtin local result
-        result="$(\command zjump worktree "$@")" && __zjump_cd "${result}"
+        result="$(__zjump worktree "$@")" && __zjump_cd "${result}"
     elif [[ ${@: -1} == "${__zjump_z_prefix}"?* ]]; then
         # shellcheck disable=SC2124
         \builtin local result="${@: -1}"
@@ -132,7 +142,7 @@ function __zjump_z() {
     else
         \builtin local result
         # shellcheck disable=SC2312
-        result="$(\command zjump query --exclude "$(__zjump_pwd)" -- "$@")" &&
+        result="$(__zjump query --exclude "$(__zjump_pwd)" -- "$@")" &&
             __zjump_cd "${result}"
     fi
 }
@@ -141,7 +151,7 @@ function __zjump_z() {
 function __zjump_zi() {
     __zjump_doctor
     \builtin local result
-    result="$(\command zjump query --interactive -- "$@")" && __zjump_cd "${result}"
+    result="$(__zjump query --interactive -- "$@")" && __zjump_cd "${result}"
 }
 
 # =============================================================================
@@ -185,7 +195,7 @@ if [[ ${BASH_VERSINFO[0]:-0} -eq 4 && ${BASH_VERSINFO[1]:-0} -ge 4 || ${BASH_VER
         # If there is a space after the last word, use interactive selection.
         elif [[ -z ${COMP_WORDS[-1]} ]]; then
             # shellcheck disable=SC2312
-            if __zjump_result="$(\command zjump query --exclude "$(__zjump_pwd)" --interactive -- "${COMP_WORDS[@]:1:${#COMP_WORDS[@]}-2}" 2>/dev/null)"; then
+            if __zjump_result="$(__zjump query --exclude "$(__zjump_pwd)" --interactive -- "${COMP_WORDS[@]:1:${#COMP_WORDS[@]}-2}" 2>/dev/null)"; then
                 # In case the terminal does not respond to \e[5n, still complete
                 # the directory on the command line.
                 COMPREPLY=("${__zjump_z_prefix}${__zjump_result}/")

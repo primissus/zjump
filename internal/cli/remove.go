@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
 )
 
@@ -32,6 +33,7 @@ func runRemove(args []string) error {
 	if err != nil {
 		return err
 	}
+	log.Debugf("remove: targets=%v", targets)
 
 	for _, target := range targets {
 		if database.Remove(target) {
@@ -44,6 +46,7 @@ func runRemove(args []string) error {
 		// If resolving was a no-op (already absolute) or the retry also fails,
 		// the path simply isn't in the database.
 		if resolved == target || !database.Remove(resolved) {
+			log.Errorf("path not found in database: %s", target)
 			return fmt.Errorf("path not found in database: %s", target)
 		}
 	}

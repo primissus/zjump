@@ -10,6 +10,7 @@ import (
 	"github.com/primissus/zjump/internal/alias"
 	"github.com/primissus/zjump/internal/config"
 	"github.com/primissus/zjump/internal/errs"
+	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
 )
 
@@ -50,12 +51,14 @@ func runAlias(args []string) error {
 	if err != nil {
 		return err
 	}
+	log.Debugf("alias: delete=%v rest=%v", delete, rest)
 
 	if delete {
 		if len(rest) != 1 {
 			return fmt.Errorf("alias --delete: exactly one name is required")
 		}
 		if !store.Delete(rest[0]) {
+			log.Errorf("alias not found: %s", rest[0])
 			return fmt.Errorf("alias not found: %s", rest[0])
 		}
 		return store.Save()
@@ -93,6 +96,7 @@ func runAlias(args []string) error {
 			return fmt.Errorf("alias path must not contain newline or carriage-return")
 		}
 		if info, statErr := os.Stat(resolved); statErr != nil || !info.IsDir() {
+			log.Errorf("alias: not a directory: %s", resolved)
 			return fmt.Errorf("not a directory: %s", resolved)
 		}
 

@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
 )
 
@@ -64,6 +65,7 @@ func runAdd(args []string) error {
 		return err
 	}
 	resolveSymlinks := config.ResolveSymlinks()
+	log.Debugf("add: targets=%v (score=%.1f)", targets, score)
 
 	for _, target := range targets {
 		var resolved string
@@ -76,6 +78,7 @@ func runAdd(args []string) error {
 			return err
 		}
 		if !utf8.ValidString(resolved) {
+			log.Errorf("invalid unicode in path: %s", resolved)
 			return fmt.Errorf("invalid unicode in path: %s", resolved)
 		}
 
@@ -84,10 +87,12 @@ func runAdd(args []string) error {
 			continue
 		}
 		if info, statErr := os.Stat(resolved); statErr != nil || !info.IsDir() {
+			log.Errorf("not a directory: %s", resolved)
 			return fmt.Errorf("not a directory: %s", resolved)
 		}
 
 		database.AddUpdate(resolved, score, now)
+		log.Debugf("add: added %s (score=%.1f)", resolved, score)
 	}
 
 	// Aging runs only if something actually changed (R-ADD-8).

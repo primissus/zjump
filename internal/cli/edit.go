@@ -8,6 +8,7 @@ import (
 	"github.com/primissus/zjump/internal/db"
 	"github.com/primissus/zjump/internal/errs"
 	"github.com/primissus/zjump/internal/fzf"
+	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
 )
 
@@ -57,6 +58,7 @@ func runEdit(args []string) error {
 	}
 
 	sub := rest[0]
+	log.Debugf("edit: sub=%s", sub)
 	switch sub {
 	case "increment":
 		if len(rest) < 2 {
@@ -76,6 +78,7 @@ func runEdit(args []string) error {
 	case "reload":
 		// Pure no-op mutation; used only to re-dump the list.
 	default:
+		log.Errorf("unrecognized edit subcommand: %s", sub)
 		return fmt.Errorf("unrecognized edit subcommand: %s", sub)
 	}
 

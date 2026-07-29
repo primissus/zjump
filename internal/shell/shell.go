@@ -21,6 +21,8 @@ type Opts struct {
 	Hook            string // "none" | "prompt" | "pwd"
 	Echo            bool   // from _ZJUMP_ECHO
 	ResolveSymlinks bool   // from _ZJUMP_RESOLVE_SYMLINKS
+	Debug           bool   // true when --debug[=PATH] was passed to init
+	DebugLogFile    string // absolute path to the debug log file; non-empty when Debug
 }
 
 var tmpl = template.Must(template.New("shell").ParseFS(templatesFS, "templates/*.tmpl"))

@@ -10,6 +10,7 @@ import (
 
 	"github.com/primissus/zjump/internal/errs"
 	"github.com/primissus/zjump/internal/git"
+	"github.com/primissus/zjump/internal/log"
 )
 
 const worktreeHelp = `Usage: zjump worktree [<name> [repo-keywords...]]
@@ -44,6 +45,7 @@ func runWorktree(args []string) error {
 	}
 	name := rest[0]
 	repoKW := rest[1:]
+	log.Debugf("worktree: name=%s repoKW=%v", name, repoKW)
 
 	repoDir, err := resolveRepo(repoKW)
 	if err != nil {
@@ -111,6 +113,7 @@ func runWorktree(args []string) error {
 	if len(available) > 0 {
 		hint = fmt.Sprintf("\navailable worktrees: %s", strings.Join(available, ", "))
 	}
+	log.Errorf("no worktree found: %s%s", name, hint)
 	return fmt.Errorf("no worktree found: %s%s", name, hint)
 }
 

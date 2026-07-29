@@ -75,8 +75,9 @@ func defaultLogFile() string {
 	return filepath.Join(os.TempDir(), "zjump-debug.log")
 }
 
-// extractGlobalFlags strips --debug and --log-file[=PATH] from args, returning
-// the parsed values and the remaining positional + subcommand-local args.
+// extractGlobalFlags strips --debug/--debug=PATH and --log-file[=PATH] from args
+// that appear BEFORE the subcommand token (the first non-flag positional). This
+// matches the documented usage: zjump [--debug] [--log-file PATH] <COMMAND>.
 func extractGlobalFlags(args []string) (debug bool, logFile string, rest []string) {
 	logFile = defaultLogFile()
 	for i := 0; i < len(args); i++ {
@@ -84,6 +85,9 @@ func extractGlobalFlags(args []string) (debug bool, logFile string, rest []strin
 		switch {
 		case arg == "--debug":
 			debug = true
+		case strings.HasPrefix(arg, "--debug="):
+			debug = true
+			logFile = arg[len("--debug="):]
 		case arg == "--log-file":
 			i++
 			if i < len(args) {
@@ -93,6 +97,8 @@ func extractGlobalFlags(args []string) (debug bool, logFile string, rest []strin
 			logFile = arg[len("--log-file="):]
 		default:
 			rest = append(rest, arg)
+			rest = append(rest, args[i+1:]...)
+			return
 		}
 	}
 	return

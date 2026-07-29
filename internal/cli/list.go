@@ -16,6 +16,7 @@ import (
 	"github.com/primissus/zjump/internal/db"
 	"github.com/primissus/zjump/internal/errs"
 	"github.com/primissus/zjump/internal/git"
+	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
 )
 
@@ -75,6 +76,7 @@ func runList(args []string) error {
 		return err
 	}
 	defer database.Save()
+	log.Debugf("list: keywords=%v all=%v", keywords, all)
 
 	now, err := paths.CurrentTime()
 	if err != nil {

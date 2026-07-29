@@ -11,6 +11,7 @@ import (
 	"github.com/primissus/zjump/internal/errs"
 	"github.com/primissus/zjump/internal/fzf"
 	"github.com/primissus/zjump/internal/git"
+	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
 )
 
@@ -21,6 +22,7 @@ type gitEntry struct {
 
 func gitFzfPickAndPrint(entries []gitEntry) error {
 	if len(entries) == 0 {
+		log.Errorf("no matches found")
 		return fmt.Errorf("no matches found")
 	}
 	if len(entries) == 1 {
@@ -66,6 +68,7 @@ func gitFzfPickAndPrint(entries []gitEntry) error {
 
 	_, path, found := strings.Cut(strings.TrimSpace(selection), "\t")
 	if !found || path == "" {
+		log.Errorf("could not read selection from fzf")
 		return fmt.Errorf("could not read selection from fzf")
 	}
 	_, werr := fmt.Fprintln(os.Stdout, path)

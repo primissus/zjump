@@ -1,7 +1,3 @@
-// Package log provides a minimal debug logger gated behind the --debug flag.
-// When enabled, timestamped messages are written to the file specified by
-// --log-file (default: os.TempDir()/zjump-debug.log). All writes are
-// synchronized and fail silently to avoid disturbing the primary command flow.
 package log
 
 import (
@@ -12,19 +8,30 @@ import (
 	"time"
 )
 
-var (
-	mu     sync.Mutex
-	w      io.WriteCloser
-	enable bool
+type Level int8
+
+const (
+	Disabled Level = -1
+	Debug    Level = 0
+	Info     Level = 1
+	Warn     Level = 2
+	Error    Level = 3
 )
 
-// Setup opens path for append and enables debug logging. Only the first call
-// has effect; subsequent calls are ignored. Returns nil on success or the
-// underlying file error.
+var (
+	mu    sync.Mutex
+	w     io.WriteCloser
+	level Level = Disabled
+)
+
 func Setup(path string) error {
+	return SetupLevel(path, Debug)
+}
+
+func SetupLevel(path string, lvl Level) error {
 	mu.Lock()
 	defer mu.Unlock()
-	if enable {
+	if level != Disabled {
 		return nil
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
@@ -32,35 +39,56 @@ func Setup(path string) error {
 		return err
 	}
 	w = f
-	enable = true
+	level = lvl
 	return nil
 }
 
-// Enabled reports whether debug logging is active.
-func Enabled() bool {
+func SetLevel(lvl Level) {
 	mu.Lock()
 	defer mu.Unlock()
-	return enable
+	level = lvl
 }
 
-// Debugf writes a timestamped line if debug logging is enabled. Errors are
-// discarded (log failures must not disturb the primary command).
-func Debugf(format string, args ...interface{}) {
+func Enabled() bool {
+	return EnabledAt(Debug)
+}
+
+func EnabledAt(lvl Level) bool {
 	mu.Lock()
 	defer mu.Unlock()
-	if !enable || w == nil {
+	return level != Disabled && lvl >= level
+}
+
+func Debugf(format string, args ...interface{}) {
+	logf(Debug, "DEBUG", format, args...)
+}
+
+func Infof(format string, args ...interface{}) {
+	logf(Info, "INFO", format, args...)
+}
+
+func Warnf(format string, args ...interface{}) {
+	logf(Warn, "WARN", format, args...)
+}
+
+func Errorf(format string, args ...interface{}) {
+	logf(Error, "ERROR", format, args...)
+}
+
+func logf(lvl Level, label, format string, args ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
+	if level == Disabled || lvl < level || w == nil {
 		return
 	}
 	now := time.Now().Format("2006-01-02T15:04:05.000")
-	fmt.Fprintf(w, "%s ", now)
+	fmt.Fprintf(w, "%s [%s] ", now, label)
 	fmt.Fprintf(w, format, args...)
 	if len(format) == 0 || format[len(format)-1] != '\n' {
 		fmt.Fprint(w, "\n")
 	}
 }
 
-// Close flushes and closes the underlying file. Safe to call when logging was
-// never enabled.
 func Close() {
 	mu.Lock()
 	defer mu.Unlock()
@@ -68,5 +96,5 @@ func Close() {
 		w.Close()
 		w = nil
 	}
-	enable = false
+	level = Disabled
 }

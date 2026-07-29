@@ -10,6 +10,7 @@ import (
 	"github.com/primissus/zjump/internal/db"
 	"github.com/primissus/zjump/internal/errs"
 	"github.com/primissus/zjump/internal/fzf"
+	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
 )
 
@@ -114,6 +115,7 @@ func doQuery(database *db.Database, p queryParams) error {
 		}
 	}
 
+	log.Debugf("query: keywords=%v (interactive=%v list=%v)", p.keywords, p.interactive, p.list)
 	now, err := paths.CurrentTime()
 	if err != nil {
 		return err
@@ -160,11 +162,13 @@ func formatDir(dir *db.Dir, now db.Epoch, score bool) string {
 func queryFirst(stream *db.Stream, now db.Epoch, score bool, excl *string) error {
 	dir := stream.Next()
 	if dir == nil {
+		log.Errorf("no match found")
 		return fmt.Errorf("no match found")
 	}
 	for excl != nil && dir.Path == *excl {
 		dir = stream.Next()
 		if dir == nil {
+			log.Errorf("you are already in the only match")
 			return fmt.Errorf("you are already in the only match")
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/primissus/zjump/internal/db"
 	"github.com/primissus/zjump/internal/errs"
 	"github.com/primissus/zjump/internal/git"
+	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
 )
 
@@ -46,6 +47,7 @@ func runBranch(args []string) error {
 	}
 	branch := rest[0]
 	repoKW := rest[1:]
+	log.Debugf("branch: branch=%s repoKW=%v", branch, repoKW)
 
 	repoDir, err := resolveRepo(repoKW)
 	if err != nil {
@@ -75,6 +77,7 @@ func runBranch(args []string) error {
 		if len(found) > 0 {
 			hint = fmt.Sprintf("\navailable branches: %s", strings.Join(found, ", "))
 		}
+		log.Errorf("branch not checked out in any worktree: %s%s", branch, hint)
 		return fmt.Errorf("branch not checked out in any worktree: %s%s", branch, hint)
 	}
 	if len(matched) > 1 {
