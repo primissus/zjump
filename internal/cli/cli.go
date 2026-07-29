@@ -19,7 +19,7 @@ import (
 )
 
 // Version is zjump's version string.
-const Version = "0.1.1"
+const Version = "0.2.0"
 
 // Run dispatches a subcommand. It returns nil on success, an errs.SilentExit to
 // stop with a specific code and no message, or a normal error (printed by main
