@@ -20,6 +20,19 @@ func requireBin(t *testing.T, name string) {
 	}
 }
 
+// requireBashCompletion skips the test on bash < 4.4, which lacks `${var@Q}`
+// and is what the generated completion function itself requires (bash.tmpl).
+// macOS ships bash 3.2 by default, so this guards local/CI runs on old bash.
+func requireBashCompletion(t *testing.T) {
+	t.Helper()
+	requireBin(t, "bash")
+	out, err := exec.Command("bash", "-c",
+		`[[ ${BASH_VERSINFO[0]:-0} -eq 4 && ${BASH_VERSINFO[1]:-0} -ge 4 || ${BASH_VERSINFO[0]:-0} -ge 5 ]]`).CombinedOutput()
+	if err != nil {
+		t.Skipf("bash < 4.4 (completion requires @Q quoting); skipping: %s", out)
+	}
+}
+
 // binDir is the directory containing the built zjump, prepended to PATH so the
 // generated `zz`/`zzi` functions (which call `\command zjump`) resolve.
 func binDir() string { return filepath.Dir(zjumpBin) }
@@ -56,6 +69,27 @@ func execScript(t *testing.T, shell, script string, env []string) (string, int) 
 			code = ee.ExitCode()
 		} else {
 			t.Fatalf("exec %s: %v", shell, err)
+		}
+	}
+	return string(out), code
+}
+
+// execInteractiveZsh runs a script with `zsh -i`, which (unlike a plain
+// non-interactive `-c` invocation) has the `zle` option on by default. The
+// generated __zjump_z_complete function is only defined when `[[ -o zle ]]`
+// (zsh.tmpl), so completion tests need this instead of execScript.
+func execInteractiveZsh(t *testing.T, script string, env []string) (string, int) {
+	t.Helper()
+	cmd := exec.Command("zsh", "-i", "--no-globalrcs", "--no-rcs", "-c", script)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(cmd.Env, "PATH="+binDir()+":"+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	code := 0
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else {
+			t.Fatalf("exec zsh -i: %v", err)
 		}
 	}
 	return string(out), code
@@ -217,6 +251,105 @@ zz proj >/dev/null 2>&1; echo "alias_jump=$(pwd)"
 		if lines["alias_jump"] != target {
 			t.Errorf("%s: zz proj (alias) = %q, want %q", shell, lines["alias_jump"], target)
 		}
+	}
+}
+
+// TestAliasPathCompletionBash verifies R-ALS-8 for bash: tab-completing the
+// <path> of `zz -a <name> <path>` uses native directory completion, and that
+// the `-d`/`--delete <name>` collision case does not.
+func TestAliasPathCompletionBash(t *testing.T) {
+	requireBashCompletion(t)
+	data := t.TempDir()
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "targetfile"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := `
+set -o emacs
+eval "$(zjump init bash --hook none)"
+COMP_WORDS=(zz -a proj "` + root + `/target")
+COMP_CWORD=3
+__zjump_z_complete
+printf 'REPLY:%s\n' "${COMPREPLY[@]}"
+`
+	out, code := execScript(t, "bash", script, []string{"_ZJUMP_DATA_DIR=" + data, "TERM=xterm"})
+	if code != 0 {
+		t.Fatalf("bash: script failed: %s", out)
+	}
+	if !strings.Contains(out, "REPLY:"+target) {
+		t.Errorf("bash: -a <name> <path> completion = %q, want it to contain %q", out, target)
+	}
+	if strings.Contains(out, "targetfile") {
+		t.Errorf("bash: completion offered a non-directory: %q", out)
+	}
+
+	deleteScript := `
+set -o emacs
+eval "$(zjump init bash --hook none)"
+COMP_WORDS=(zz -a -d proj)
+COMP_CWORD=3
+__zjump_z_complete
+printf 'REPLY:%s\n' "${COMPREPLY[@]}"
+`
+	out2, code2 := execScript(t, "bash", deleteScript, []string{"_ZJUMP_DATA_DIR=" + data, "TERM=xterm"})
+	if code2 != 0 {
+		t.Fatalf("bash: delete-mode script failed: %s", out2)
+	}
+	if strings.Contains(out2, root) {
+		t.Errorf("bash: -a -d <name> wrongly offered directory completion: %q", out2)
+	}
+}
+
+// TestAliasPathCompletionZsh verifies R-ALS-8 for zsh: tab-completing the
+// <path> of `zz -a <name> <path>` dispatches to `_cd -/`, and that the
+// `-d`/`--delete <name>` collision case does not.
+func TestAliasPathCompletionZsh(t *testing.T) {
+	requireBin(t, "zsh")
+	data := t.TempDir()
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	zshScript := `
+eval "$(zjump init zsh --hook none)"
+typeset -a _cd_calls
+function _cd() { _cd_calls+=("$*") }
+words=(zz -a proj "` + root + `/target")
+CURRENT=4
+__zjump_z_complete
+printf 'CALLS:%s\n' "${_cd_calls[@]}"
+`
+	out3, code3 := execInteractiveZsh(t, zshScript, []string{"_ZJUMP_DATA_DIR=" + data})
+	if code3 != 0 {
+		t.Fatalf("zsh: script failed: %s", out3)
+	}
+	if !strings.Contains(out3, "CALLS:-/") {
+		t.Errorf("zsh: -a <name> <path> completion did not invoke `_cd -/`: %q", out3)
+	}
+
+	zshDeleteScript := `
+eval "$(zjump init zsh --hook none)"
+typeset -a _cd_calls
+function _cd() { _cd_calls+=("$*") }
+words=(zz -a -d proj)
+CURRENT=4
+__zjump_z_complete
+(( ${#_cd_calls[@]} )) && printf 'CALLS:%s\n' "${_cd_calls[@]}"
+true
+`
+	out4, code4 := execInteractiveZsh(t, zshDeleteScript, []string{"_ZJUMP_DATA_DIR=" + data})
+	if code4 != 0 {
+		t.Fatalf("zsh: delete-mode script failed: %s", out4)
+	}
+	if strings.Contains(out4, "CALLS:") {
+		t.Errorf("zsh: -a -d <name> wrongly invoked `_cd`: %q", out4)
 	}
 }
 

@@ -249,6 +249,13 @@ one-for-one, plus one zjump-only extension:
   alias is never auto-deleted.
 - **R-ALS-7** When the alias target equals `--exclude`, the error is
   `"you are already in the only match"`.
+- **R-ALS-8** Bash/zsh tab-completion for `zz -a|--alias <name> <path>`
+  completes `<path>` using native directory completion (bash: `compgen -A
+  directory`; zsh: `_cd -/`) — the same mechanism as single-argument `z <TAB>`
+  completion — rather than the interactive fzf/frecency flow, since alias
+  targets are plain filesystem paths, not frecency-tracked jump keywords.
+  Does not apply when completing `-d|--delete <name>` (the name is not a
+  path).
 
 ### 2.12 `branch` / `worktree` — git-based jumps
 

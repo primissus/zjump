@@ -88,7 +88,8 @@ function __zjump_z() {
             'Jump to a directory using keywords or flags.' \
             '' \
             'Options:' \
-            '  -a, --alias <NAME> <PATH>    Set a named alias for a directory' \
+            '  -a, --alias [<NAME> <PATH>] Jump to a named alias (no args = fzf);' \
+            '                               set an alias with <NAME> <PATH>' \
             '  -b, --branch <BRANCH>        Jump to a git branch worktree' \
             '  -w, --worktree <NAME>        Jump to a git worktree by name' \
             '  -h, --help                   Show this help message' \
@@ -105,7 +106,12 @@ function __zjump_z() {
         __zjump_cd "$2"
     elif [[ "$1" = "-a" || "$1" = "--alias" ]]; then
         shift
-        __zjump alias "$@"
+        if [[ $# -eq 0 ]]; then
+            \builtin local result
+            result="$(__zjump alias --pick)" && __zjump_cd "${result}"
+        else
+            __zjump alias "$@"
+        fi
     elif [[ "$1" = "-b" || "$1" = "--branch" ]]; then
         shift
         \builtin local result
@@ -155,6 +161,15 @@ if [[ -o zle ]]; then
 
         if [[ "${#words[@]}" -eq 2 ]]; then
             # Show completions for local directories.
+            _cd -/
+        # Completing the <path> of `-a`/`--alias <name> <path>`: alias targets
+        # are plain filesystem paths, not frecency keywords, so use native
+        # directory completion here too, not the interactive fzf flow below.
+        # The words[3] != -* guard excludes `-a -d <TAB>` (deleting by name),
+        # whose 3rd word is a name, not a path.
+        elif [[ "${#words[@]}" -eq 4 &&
+            ( "${words[2]}" == "-a" || "${words[2]}" == "--alias" ) &&
+            "${words[3]}" != -* ]]; then
             _cd -/
         elif [[ "${words[-1]}" == '' ]]; then
             # Show completions for Space-Tab.

@@ -34,7 +34,8 @@ fmt:          ## Format all Go source
 INSTALL_DIR := $(or $(DESTDIR),$(HOME)/.local/bin)
 
 install: build ## Install to ~/.local/bin (set DESTDIR=/usr/local/bin for sudo)
-	scripts/install.sh "$(INSTALL_DIR)"
+	mkdir -p "$(INSTALL_DIR)"
+	install -m 0755 $(BINARY) "$(INSTALL_DIR)/$(BINARY)"
 
 clean:        ## Remove build artifacts
 	rm -f $(BINARY)

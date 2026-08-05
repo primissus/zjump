@@ -178,7 +178,8 @@ Commands:
     remove [paths]...          Remove directories from the database
     init <bash|zsh>            Print the shell integration script
     edit                       Interactively browse/edit the database (needs fzf)
-    alias [<name> <dir>]      List, create, or delete directory aliases
+    alias [<name> <dir>]      List, create, or delete directory aliases;
+                              --pick interactively selects via fzf
     branch <name> [repo...]   Print the worktree path for a checked-out branch
     worktree <name> [repo...] Print a worktree path by name or branch
     list                       List directories (zoxide-like) plus opt-in aliases,
