@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/git"
 	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
 )
@@ -65,7 +66,8 @@ func runAdd(args []string) error {
 		return err
 	}
 	resolveSymlinks := config.ResolveSymlinks()
-	log.Debugf("add: targets=%v (score=%.1f)", targets, score)
+	autoIndex := config.AutoIndexDirectory()
+	log.Debugf("add: targets=%v (score=%.1f, autoIndex=%t)", targets, score, autoIndex)
 
 	for _, target := range targets {
 		var resolved string
@@ -93,6 +95,17 @@ func runAdd(args []string) error {
 
 		database.AddUpdate(resolved, score, now)
 		log.Debugf("add: added %s (score=%.1f)", resolved, score)
+
+		// _ZJUMP_AUTO_INDEX_DIRECTORY=1: seed the worktrees (and branches) of
+		// the repository containing this path, once each, so they become
+		// jumpable by frecency without a prior visit. Best effort — git
+		// errors are swallowed by seedWorktrees.
+		if autoIndex {
+			repoDir, repoErr := git.RepoRoot(resolved)
+			if repoErr == nil {
+				seedWorktrees(database, repoDir, now)
+			}
+		}
 	}
 
 	// Aging runs only if something actually changed (R-ADD-8).

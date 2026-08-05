@@ -60,6 +60,12 @@ func OpenDir(dataDir string) (*Database, error) {
 // Dirs returns the current in-memory entries.
 func (db *Database) Dirs() []Dir { return db.dirs }
 
+// Contains reports whether path is present in the database, without touching
+// rank or last_accessed. Used by worktree indexing to seed entries exactly once
+// (an already-seeded path is left alone so real visits are the only force that
+// inflates its rank).
+func (db *Database) Contains(path string) bool { return db.find(path) != nil }
+
 // Dirty reports whether the database has unsaved changes.
 func (db *Database) Dirty() bool { return db.dirty }
 

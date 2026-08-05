@@ -106,6 +106,94 @@ func collectWorktreeEntries(repoDir string) ([]gitEntry, error) {
 	return entries, nil
 }
 
+// seedWorktrees seeds every worktree path of repoDir into the frecency database
+// exactly once: a path already present is left alone (so its rank is only ever
+// driven by real visits), a missing path is inserted with rank 1.0 so it stays
+// queryable and survives aging. git errors are swallowed — indexing is best
+// effort and must never fail an `add` or a `worktree`/`branch` lookup.
+func seedWorktrees(database *db.Database, repoDir string, now db.Epoch) {
+	wts, err := git.Worktrees(repoDir)
+	if err != nil {
+		return
+	}
+	for _, wt := range wts {
+		if wt.Path == "" {
+			continue
+		}
+		if info, statErr := os.Stat(wt.Path); statErr != nil || !info.IsDir() {
+			continue
+		}
+		if !database.Contains(wt.Path) {
+			database.Add(wt.Path, 1.0, now)
+		}
+	}
+}
+
+// seedRepoWorktrees seeds the worktrees (and branches) of repoDir into the
+// frecency database once each. It is best effort: a failure to open the
+// database (bad _ZJUMP_DATA_DIR) only skips indexing, never fails the
+// `worktree`/`branch` lookup that triggered it.
+func seedRepoWorktrees(repoDir string) {
+	database, err := openDB()
+	if err != nil {
+		return
+	}
+	defer database.Save()
+	now, err := paths.CurrentTime()
+	if err != nil {
+		return
+	}
+	seedWorktrees(database, repoDir, now)
+}
+
+// collectAllReposWorktrees scans the DB directories (optionally narrowed by
+// keywords) for a `.git` entry and collects the worktrees of each distinct repo
+// (deduped by canonical main checkout path, mirroring list.go's
+// collectAllReposRows). Each entry's label carries a repo disambiguator so
+// same-named worktrees across repos stay distinguishable in the fzf picker.
+func collectAllReposWorktrees(database *db.Database, now db.Epoch, keywords []string) ([]gitEntry, error) {
+	excludeGlobs, err := config.ExcludeDirs()
+	if err != nil {
+		return nil, err
+	}
+	opts := db.NewStreamOptions(now).
+		WithKeywords(keywords).
+		WithExclude(excludeGlobs).
+		WithExists(true).
+		WithResolveSymlinks(config.ResolveSymlinks())
+	stream := db.NewStream(database, opts)
+
+	seen := make(map[string]bool)
+	var entries []gitEntry
+	for {
+		dir := stream.Next()
+		if dir == nil {
+			break
+		}
+		if _, statErr := os.Stat(filepath.Join(dir.Path, ".git")); statErr != nil {
+			continue
+		}
+		wts, werr := git.Worktrees(dir.Path)
+		if werr != nil || len(wts) == 0 {
+			continue
+		}
+		canonical := wts[0].Path
+		if seen[canonical] {
+			continue
+		}
+		seen[canonical] = true
+		for _, wt := range wts {
+			label := filepath.Base(wt.Path)
+			if wt.Branch != "" && label != wt.Branch {
+				label = fmt.Sprintf("%s (%s)", label, wt.Branch)
+			}
+			label = fmt.Sprintf("%s [repo: %s]", label, filepath.Base(canonical))
+			entries = append(entries, gitEntry{label: label, path: wt.Path})
+		}
+	}
+	return entries, nil
+}
+
 func scanDBForWorktrees(database *db.Database, n int) ([]gitEntry, error) {
 	now, err := paths.CurrentTime()
 	if err != nil {

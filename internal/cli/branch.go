@@ -54,6 +54,10 @@ func runBranch(args []string) error {
 		return err
 	}
 
+	// Index the repo's worktrees (and branches) into the frecency database so
+	// they become jumpable by frecency on later `zz <keyword>` calls.
+	seedRepoWorktrees(repoDir)
+
 	wts, err := git.Worktrees(repoDir)
 	if err != nil {
 		return fmt.Errorf("could not list worktrees: %w", err)
@@ -105,6 +109,7 @@ func runBranchPick(repoKW []string) error {
 		if repoErr != nil {
 			return pickFromDBBranch()
 		}
+		seedRepoWorktrees(repoDir)
 		entries, err := collectBranchEntries(repoDir)
 		if err != nil {
 			return fmt.Errorf("could not list branches: %w", err)
@@ -115,6 +120,7 @@ func runBranchPick(repoKW []string) error {
 	if err != nil {
 		return err
 	}
+	seedRepoWorktrees(repoDir)
 	entries, err := collectBranchEntries(repoDir)
 	if err != nil {
 		return fmt.Errorf("could not list branches: %w", err)

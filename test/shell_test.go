@@ -478,6 +478,208 @@ func TestGitBranchWorktree(t *testing.T) {
 	}
 }
 
+// TestWorktreeAllFlag verifies `zz -W` (and --worktree-all) dispatch to
+// `zjump worktree --all` and that the worktrees of a tracked repo land in the
+// frecency DB (so a later plain `zz <worktree-basename>` jump works).
+func TestWorktreeAllFlag(t *testing.T) {
+	requireBin(t, "git")
+	for _, shell := range []string{"bash", "zsh"} {
+		requireBin(t, shell)
+		data := t.TempDir()
+		base := t.TempDir()
+
+		mustGit := func(args ...string) {
+			t.Helper()
+			cmd := exec.Command("git", args...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("git %v: %s\n%s", args, err, out)
+			}
+		}
+		mainWT := filepath.Join(base, "main")
+		os.MkdirAll(mainWT, 0o755)
+		mustGit("-C", mainWT, "init", "-b", "main")
+		mustGit("-C", mainWT, "config", "user.email", "test@test.local")
+		mustGit("-C", mainWT, "config", "user.name", "Test")
+		mustGit("-C", mainWT, "commit", "--allow-empty", "-m", "init")
+
+		featWT := filepath.Join(base, "feature-x")
+		mustGit("-C", mainWT, "worktree", "add", featWT, "-b", "feature/x")
+
+		mainResolved, err := filepath.EvalSymlinks(mainWT)
+		if err != nil {
+			t.Fatal(err)
+		}
+		featResolved, err := filepath.EvalSymlinks(featWT)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Track the repo so `--all` finds it.
+		run(t, data, nil, "add", mainResolved)
+
+		// zz -W from OUTSIDE any repo still lists this repo's worktrees.
+		workScript := `
+eval "$(zjump init ` + shell + ` --hook none)"
+cd "` + t.TempDir() + `"
+zz -W >/dev/null 2>&1 || true
+zz --worktree-all >/dev/null 2>&1 || true
+`
+		out, code := execScript(t, shell, workScript, []string{"_ZJUMP_DATA_DIR=" + data})
+		if code != 0 {
+			t.Fatalf("%s: zz -W script failed: %s", shell, out)
+		}
+
+		// zz -W from INSIDE the repo must also list all worktrees (it must not
+		// be limited to the current repo's worktrees).
+		inRepoScript := `
+eval "$(zjump init ` + shell + ` --hook none)"
+cd "` + mainResolved + `"
+zz -W >/dev/null 2>&1 || true
+`
+		out, code = execScript(t, shell, inRepoScript, []string{"_ZJUMP_DATA_DIR=" + data})
+		if code != 0 {
+			t.Fatalf("%s: zz -W inside repo failed: %s", shell, out)
+		}
+
+		// Seeding from `worktree --all` must have indexed both worktrees, so a
+		// plain frecency query for each basename now matches.
+		featList := run(t, data, nil, "query", "--list").stdout
+		if !strings.Contains(featList, mainResolved) {
+			t.Errorf("%s: main checkout not indexed after zz -W:\n%s", shell, featList)
+		}
+		if !strings.Contains(featList, featResolved) {
+			t.Errorf("%s: feature worktree not indexed after zz -W:\n%s", shell, featList)
+		}
+	}
+}
+
+// TestWorktreeSeedsOnLookup verifies `zjump worktree <name>` seeds every
+// worktree of the resolved repo into the DB, so a sibling worktree becomes
+// jumpable by frecency before ever being visited.
+func TestWorktreeSeedsOnLookup(t *testing.T) {
+	requireBin(t, "git")
+	data := t.TempDir()
+	base := t.TempDir()
+
+	mustGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %s\n%s", args, err, out)
+		}
+	}
+	mainWT := filepath.Join(base, "main")
+	os.MkdirAll(mainWT, 0o755)
+	mustGit("-C", mainWT, "init", "-b", "main")
+	mustGit("-C", mainWT, "config", "user.email", "test@test.local")
+	mustGit("-C", mainWT, "config", "user.name", "Test")
+	mustGit("-C", mainWT, "commit", "--allow-empty", "-m", "init")
+
+	featWT := filepath.Join(base, "feature-x")
+	mustGit("-C", mainWT, "worktree", "add", featWT, "-b", "feature/x")
+
+	mainResolved, err := filepath.EvalSymlinks(mainWT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	featResolved, err := filepath.EvalSymlinks(featWT)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Only the main checkout is tracked; the feature worktree has never been
+	// visited and is not yet in the DB.
+	run(t, data, nil, "add", mainResolved)
+	list := run(t, data, nil, "query", "--list").stdout
+	if strings.Contains(list, featResolved) {
+		t.Fatalf("feature worktree already indexed before lookup:\n%s", list)
+	}
+
+	// Look up the main worktree by name from the main checkout.
+	r := runIn(t, data, mainWT, nil, "worktree", "main")
+	if r.code != 0 {
+		t.Fatalf("worktree main: %s", r.stderr)
+	}
+	if strings.TrimSpace(r.stdout) != mainResolved {
+		t.Errorf("worktree main = %q, want %q", r.stdout, mainResolved)
+	}
+
+	// The lookup must have seeded the sibling worktree too.
+	list = run(t, data, nil, "query", "--list").stdout
+	if !strings.Contains(list, featResolved) {
+		t.Errorf("feature worktree not seeded by worktree lookup:\n%s", list)
+	}
+
+	// And it must be jumpable by plain frecency now.
+	if got := strings.TrimSpace(run(t, data, nil, "query", "feature-x").stdout); got != featResolved {
+		t.Errorf("zz feature-x after seed = %q, want %q", got, featResolved)
+	}
+}
+
+// TestAutoIndexDirectory verifies _ZJUMP_AUTO_INDEX_DIRECTORY=1: adding a
+// directory inside a git repo seeds the repo's worktrees into the DB, exactly
+// once each (repeat adds do not inflate sibling ranks).
+func TestAutoIndexDirectory(t *testing.T) {
+	requireBin(t, "git")
+	data := t.TempDir()
+	base := t.TempDir()
+
+	mustGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %s\n%s", args, err, out)
+		}
+	}
+	mainWT := filepath.Join(base, "main")
+	os.MkdirAll(mainWT, 0o755)
+	mustGit("-C", mainWT, "init", "-b", "main")
+	mustGit("-C", mainWT, "config", "user.email", "test@test.local")
+	mustGit("-C", mainWT, "config", "user.name", "Test")
+	mustGit("-C", mainWT, "commit", "--allow-empty", "-m", "init")
+
+	featWT := filepath.Join(base, "feature-x")
+	mustGit("-C", mainWT, "worktree", "add", featWT, "-b", "feature/x")
+
+	mainResolved, err := filepath.EvalSymlinks(mainWT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	featResolved, err := filepath.EvalSymlinks(featWT)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// With the env var off (default), add does NOT index sibling worktrees.
+	run(t, data, nil, "add", mainResolved)
+	if list := run(t, data, nil, "query", "--list").stdout; strings.Contains(list, featResolved) {
+		t.Fatalf("sibling indexed with auto-index off:\n%s", list)
+	}
+
+	// With it on, the sibling is seeded after a single add...
+	run(t, data, []string{"_ZJUMP_AUTO_INDEX_DIRECTORY=1"}, "add", mainResolved)
+	list := run(t, data, nil, "query", "--list").stdout
+	if !strings.Contains(list, featResolved) {
+		t.Fatalf("sibling not indexed with auto-index on:\n%s", list)
+	}
+
+	// ...and a repeat add with it on leaves the sibling rank untouched (1.0),
+	// so it only ever grows from real visits.
+	run(t, data, []string{"_ZJUMP_AUTO_INDEX_DIRECTORY=1"}, "add", mainResolved)
+	scores := run(t, data, nil, "query", "--list", "--score").stdout
+	// main: added 3× (real visits) → rank 3 → score 12.0.
+	// sibling: seeded once, never re-inflated by repeat adds → rank 1 → 4.0.
+	if !strings.Contains(scores, "12.0 "+mainResolved) {
+		t.Errorf("expected main at score 12.0 after 3 adds:\n%s", scores)
+	}
+	if !strings.Contains(scores, "4.0 "+featResolved) {
+		t.Errorf("sibling worktree rank inflated by repeat adds; want 4.0:\n%s", scores)
+	}
+}
+
 // TestListBranchesWorktrees exercises `zjump list --branches`, `--worktrees`,
 // and `--all-repos` against a real git repo. Mirrors TestGitBranchWorktree
 // setup; gated shelltests build tag + requireBin("git") keeps the default

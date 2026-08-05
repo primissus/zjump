@@ -49,6 +49,7 @@ zz -a proj ~/src/proj  # create an alias 'proj' → ~/src/proj
 zz proj                # jump to the alias target (aliases beat frecency)
 zz -b main myrepo      # jump to the worktree where 'main' is checked out
 zz -w api myrepo       # jump to a worktree by name (e.g. directory named 'api')
+zz -W                  # fzf-pick a worktree across every repo in the DB
 ```
 
 The `zz` command tracks directories as you visit them and ranks them by
@@ -234,6 +235,22 @@ Print a worktree path matching `<name>` by directory basename first, then by
 branch shortname. Multiple matches produce an ambiguity error. Repository
 resolution works the same as `branch`.
 
+Every `worktree`/`branch` lookup also **seeds** the resolved repository's
+worktree paths into the frecency database (once each, rank 1.0, via
+`database.Add` when not already present), so a first `zz -w`/`zz -b` makes all
+of a repo's worktrees jumpable by plain `zz <keyword>` afterward.
+
+### `zjump worktree --all`
+
+List worktrees across **every** repository known to the frecency database,
+launching the same interactive fzf picker as bare `zz -w` but ignoring the
+current directory (so it works even when you're inside a repo). Repos are
+deduplicated by canonical main-checkout path; each entry's fzf label carries a
+`[repo: <basename>]` suffix so same-named worktrees across repos stay
+distinguishable. Wired to the shell as `zz -W` / `zz --worktree-all`. Also a
+zjump-only extension (no zoxide analog). Like the per-repo lookups, it seeds
+every discovered worktree path into the frecency database on first use.
+
 ### `zjump list [keywords]...`
 
 List the tracked directories ("DIRECTORIES" section by default) plus optional
@@ -341,6 +358,16 @@ called; the rest are read on each invocation.
     database-fallback when `-b` / `-w` are called with no argument and the
     current directory is not inside a git repository. Must be a positive
     integer. Default: `10`.
+- **`_ZJUMP_AUTO_INDEX_DIRECTORY`**
+  - When set to `1`, every `zjump add` (i.e. every `cd` tracked by the shell
+    hook) also **seeds** the worktrees of the repository containing the added
+    path into the frecency database — once each, with rank 1.0, only when not
+    already present — so all of a repo's worktree/branch directories become
+    jumpable by `zz <keyword>` without ever having visited them.
+  - Deliberately off by default: it adds one `git worktree list` call per `cd`
+    into a git repository. Seeded entries are never rank-inflated on repeated
+    visits (real `cd`s into a path are the only force that grows its rank).
+  - zjump-only extension (no zoxide analog).
 
 ## How it works
 

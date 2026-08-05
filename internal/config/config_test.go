@@ -100,6 +100,25 @@ func TestEchoAndResolve(t *testing.T) {
 	}
 }
 
+func TestAutoIndexDirectory(t *testing.T) {
+	unsetenv(t, "_ZJUMP_AUTO_INDEX_DIRECTORY")
+	if AutoIndexDirectory() {
+		t.Error("unset _ZJUMP_AUTO_INDEX_DIRECTORY should be false")
+	}
+	t.Setenv("_ZJUMP_AUTO_INDEX_DIRECTORY", "1")
+	if !AutoIndexDirectory() {
+		t.Error("_ZJUMP_AUTO_INDEX_DIRECTORY=1 should be true")
+	}
+	t.Setenv("_ZJUMP_AUTO_INDEX_DIRECTORY", "0")
+	if AutoIndexDirectory() {
+		t.Error("_ZJUMP_AUTO_INDEX_DIRECTORY=0 should be false (only exact \"1\")")
+	}
+	t.Setenv("_ZJUMP_AUTO_INDEX_DIRECTORY", "yes")
+	if AutoIndexDirectory() {
+		t.Error("_ZJUMP_AUTO_INDEX_DIRECTORY=yes should be false (only exact \"1\")")
+	}
+}
+
 func TestExcludeDirsCustom(t *testing.T) {
 	t.Setenv("_ZJUMP_EXCLUDE_DIRS", "/tmp/*:/secret")
 	globs, err := ExcludeDirs()

@@ -111,6 +111,7 @@ function __zjump_z() {
             '                               set an alias with <NAME> <PATH>' \
             '  -b, --branch <BRANCH>        Jump to a git branch worktree' \
             '  -w, --worktree <NAME>        Jump to a git worktree by name' \
+            '  -W, --worktree-all           fzf-pick worktrees across all repos' \
             '  -h, --help                   Show this help message' \
             '' \
             'Without arguments, jumps to $HOME.' \
@@ -141,6 +142,10 @@ function __zjump_z() {
         shift
         \builtin local result
         result="$(__zjump worktree "$@")" && __zjump_cd "${result}"
+    elif [[ $1 = "-W" || $1 = "--worktree-all" ]]; then
+        shift
+        \builtin local result
+        result="$(__zjump worktree --all "$@")" && __zjump_cd "${result}"
     elif [[ ${@: -1} == "${__zjump_z_prefix}"?* ]]; then
         # shellcheck disable=SC2124
         \builtin local result="${@: -1}"

@@ -63,6 +63,12 @@ func Echo() bool { return os.Getenv("_ZJUMP_ECHO") == "1" }
 // when the value is exactly "1" (R-ENV-6).
 func ResolveSymlinks() bool { return os.Getenv("_ZJUMP_RESOLVE_SYMLINKS") == "1" }
 
+// AutoIndexDirectory reports whether `add` should also seed the worktrees (and
+// therefore branches) of the repository containing each added path into the
+// frecency database, once each, so they become jumpable without a prior visit.
+// True only when the value is exactly "1". zjump extension (no zoxide analog).
+func AutoIndexDirectory() bool { return os.Getenv("_ZJUMP_AUTO_INDEX_DIRECTORY") == "1" }
+
 // ExcludeDirs returns the exclude globs. If _ZJUMP_EXCLUDE_DIRS is set, it is an
 // OS path-list of glob patterns; if unset, it defaults to a single pattern
 // matching the home directory literally (glob-escaped, non-recursive). Mirrors

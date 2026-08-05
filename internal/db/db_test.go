@@ -95,6 +95,21 @@ func TestAddVsAddUpdate(t *testing.T) {
 	}
 }
 
+// TestContains reports presence without mutating rank or last_accessed.
+func TestContains(t *testing.T) {
+	db, _ := OpenDir(t.TempDir())
+	if db.Contains("/p") {
+		t.Error("Contains returned true for absent path")
+	}
+	db.AddUpdate("/p", 1.0, testEpoch)
+	if !db.Contains("/p") {
+		t.Error("Contains returned false for present path")
+	}
+	if len(db.Dirs()) != 1 {
+		t.Errorf("Contains mutated the database; got %d entries", len(db.Dirs()))
+	}
+}
+
 // TestRankFloor: rank never goes negative on Add/AddUpdate (R-ADD-1, R-EDIT-2).
 func TestRankFloor(t *testing.T) {
 	db, _ := OpenDir(t.TempDir())

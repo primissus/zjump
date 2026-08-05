@@ -11,9 +11,10 @@ import (
 	"github.com/primissus/zjump/internal/errs"
 	"github.com/primissus/zjump/internal/git"
 	"github.com/primissus/zjump/internal/log"
+	"github.com/primissus/zjump/internal/paths"
 )
 
-const worktreeHelp = `Usage: zjump worktree [<name> [repo-keywords...]]
+const worktreeHelp = `Usage: zjump worktree [<name> [repo-keywords...]] [--all]
 
 Print a worktree path by name or branch.
 
@@ -25,6 +26,10 @@ worktrees.
 
 Optionally specify repo-keywords to search the frecency database
 for a specific repository.
+
+Flags:
+    -a, --all    List worktrees across all repositories known to the
+                 frecency database (ignores <name>); zjump extension.
 `
 
 // runWorktree implements `zjump worktree <name> [repo-keywords...]`. It matches
@@ -32,6 +37,9 @@ for a specific repository.
 // shortnames, and prints the path of the matched worktree.
 func runWorktree(args []string) error {
 	fs := newFlagSet("worktree")
+	var allRepos bool
+	fs.BoolVar(&allRepos, "a", false, "list worktrees across all repos in the DB")
+	fs.BoolVar(&allRepos, "all", false, "list worktrees across all repos in the DB")
 	rest, err := parseArgs(fs, args)
 	if err != nil {
 		if err == flag.ErrHelp {
@@ -39,6 +47,9 @@ func runWorktree(args []string) error {
 			return nil
 		}
 		return err
+	}
+	if allRepos {
+		return runWorktreePickAll(rest)
 	}
 	if len(rest) == 0 {
 		return runWorktreePick(nil)
@@ -51,6 +62,10 @@ func runWorktree(args []string) error {
 	if err != nil {
 		return err
 	}
+
+	// Index the repo's worktrees (and branches) into the frecency database so
+	// they become jumpable by frecency on later `zz <keyword>` calls.
+	seedRepoWorktrees(repoDir)
 
 	wts, err := git.Worktrees(repoDir)
 	if err != nil {
@@ -127,6 +142,7 @@ func runWorktreePick(repoKW []string) error {
 		if repoErr != nil {
 			return pickFromDBWorktree()
 		}
+		seedRepoWorktrees(repoDir)
 		entries, err := collectWorktreeEntries(repoDir)
 		if err != nil {
 			return fmt.Errorf("could not list worktrees: %w", err)
@@ -137,9 +153,42 @@ func runWorktreePick(repoKW []string) error {
 	if err != nil {
 		return err
 	}
+	seedRepoWorktrees(repoDir)
 	entries, err := collectWorktreeEntries(repoDir)
 	if err != nil {
 		return fmt.Errorf("could not list worktrees: %w", err)
+	}
+	return gitFzfPickAndPrint(entries)
+}
+
+// runWorktreePickAll implements `zjump worktree --all` (the shell `zz -W`):
+// it lists worktrees across every repository known to the frecency database,
+// seeding any not-yet-indexed worktree paths along the way. Dedupes repos by
+// canonical main checkout so a multi-worktree repo contributes one set of rows.
+func runWorktreePickAll(keywords []string) error {
+	database, err := openDB()
+	if err != nil {
+		return err
+	}
+	defer database.Save()
+
+	now, err := paths.CurrentTime()
+	if err != nil {
+		return err
+	}
+	// Seed all indexed worktrees so a first `zz -W` also makes them jumpable
+	// by frecency (same seed-once semantics as seedWorktrees).
+	entries, err := collectAllReposWorktrees(database, now, keywords)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if !database.Contains(e.path) {
+			database.Add(e.path, 1.0, now)
+		}
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("no git worktrees found in the tracked directories")
 	}
 	return gitFzfPickAndPrint(entries)
 }

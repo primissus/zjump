@@ -19,7 +19,7 @@ import (
 )
 
 // Version is zjump's version string.
-const Version = "0.4.1"
+const Version = "0.5.0"
 
 // Run dispatches a subcommand. It returns nil on success, an errs.SilentExit to
 // stop with a specific code and no message, or a normal error (printed by main
@@ -181,7 +181,8 @@ Commands:
     alias [<name> <dir>]      List, create, or delete directory aliases;
                               --pick interactively selects via fzf
     branch <name> [repo...]   Print the worktree path for a checked-out branch
-    worktree <name> [repo...] Print a worktree path by name or branch
+    worktree <name> [repo...] Print a worktree path by name or branch;
+                              --all fzf-picks worktrees across all repos in DB
     list                       List directories (zoxide-like) plus opt-in aliases,
                               branches, and worktrees sections
 
@@ -196,6 +197,9 @@ Environment variables:
     _ZJUMP_RESOLVE_SYMLINKS    Resolve symlinks when storing paths (=1)
     _ZJUMP_PICK_TOP            Top-N git-worktree DB entries listed when -b/-w
                               has no arg and CWD is not in a repo (default 10)
+    _ZJUMP_AUTO_INDEX_DIRECTORY
+                              Seed the worktrees/branches of each added repo
+                              into the database on every add (=1) — see README
 `)
 }
 
@@ -209,5 +213,8 @@ func printCmdHelp(w io.Writer, name, cmdUsage string) {
     _ZJUMP_RESOLVE_SYMLINKS    Resolve symlinks when storing paths (=1)
     _ZJUMP_PICK_TOP            Top-N git-worktree DB entries listed when -b/-w
                               has no arg and CWD is not in a repo (default 10)
+    _ZJUMP_AUTO_INDEX_DIRECTORY
+                              Seed the worktrees/branches of each added repo
+                              into the database on every add (=1) — see README
 `)
 }
