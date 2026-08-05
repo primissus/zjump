@@ -123,6 +123,29 @@ the full `R-LIST-*` requirements.
 
 ---
 
+## 7. Worktree indexing (zjump-only extension, 2026-08-05)
+
+Worktree paths get written into the frecency DB (seed-once, rank 1.0) so they
+are jumpable by plain `zz <keyword>` before ever being visited. See
+[`REQUIREMENTS.md` §2.12](../REQUIREMENTS.md) for the full `R-GIT-9`..`R-GIT-11`,
+`R-ADD-10`, and `R-ENV-8` requirements.
+
+| ID | Scenario | Command | Expected |
+|---|---|---|---|
+| G-01 | `zz -W` outside a repo | `cd /tmp && zz -W` (repo tracked in DB) | fzf lists that repo's worktrees; labels carry `[repo: <basename>]` |
+| G-02 | `zz -W` inside a repo | `cd ~/src/repo && zz -W` | Still lists worktrees of ALL DB-known repos (ignores cwd) |
+| G-03 | `--all` single-offer fast path | One tracked repo, one worktree | Path printed directly (no fzf) |
+| G-04 | `zz -W` seeds worktrees | Track repo, run `zz -W`, then `zjump query <sibling-basename>` | Sibling worktree is in DB and jumpable by frecency |
+| G-05 | `zz -w` seeds siblings | `cd main && zz -w main`, then `zjump query feature-x` | The never-visited feature worktree is seeded and jumpable |
+| G-06 | `zz -b` seeds siblings | `cd main && zz -b main`, then `zjump query feature-x` | Same seeding as G-05 (branches ride on worktree paths) |
+| G-07 | Auto-index off (default) | `zjump add main` (no env var) | Sibling worktrees NOT added to DB |
+| G-08 | Auto-index on | `_ZJUMP_AUTO_INDEX_DIRECTORY=1 zjump add main` | Repo's worktrees seeded once (rank 1.0) |
+| G-09 | Seed-once: no rank inflation | Repeat `_ZJUMP_AUTO_INDEX_DIRECTORY=1 zjump add main` | Sibling rank stays 1.0 (score 4.0), only real visits grow it |
+| G-10 | Dedup across tracked worktrees | Track both main + feature, `zjump worktree --all` | Repo's worktrees emitted once (canonical main-checkout dedup) |
+| G-11 | Best-effort indexing | `zz -w` with broken `_ZJUMP_DATA_DIR` | Lookup still prints/jumps; indexing silently skipped |
+
+---
+
 ## Quick smoke test
 
 One-liner to seed the DB and verify all four jump types work end-to-end:

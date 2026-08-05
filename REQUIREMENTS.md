@@ -30,7 +30,7 @@ Decisions locked with the user:
 | `import` subcommand | Out of scope |
 | DB format | zjump-native — **not** byte-compatible with zoxide's `db.zo` |
 | Target platforms | Unix (Linux, macOS). Windows out of scope |
-| **Extensions (2026-07-24 re-scope)** | Aliases (§2.11) + git branch/worktree jumps (§2.12) |
+| **Extensions (2026-07-24 re-scope; 2026-08-05 worktree indexing)** | Aliases (§2.11) + git branch/worktree jumps (§2.12) + worktree indexing (`worktree --all`/`zz -W`, `_ZJUMP_AUTO_INDEX_DIRECTORY`, `-w`/`-b` seeding) |
 
 ---
 
@@ -54,6 +54,14 @@ Decisions locked with the user:
 - **R-ADD-8** After any change, run the aging pass (R-DB-4) using
   `_ZJUMP_MAXAGE`, then save atomically.
 - **R-ADD-9** Error on an invalid system clock (time before the Unix epoch).
+- **R-ADD-10** *(extension)* When `_ZJUMP_AUTO_INDEX_DIRECTORY=1`, after adding
+  each path that lies inside a git repository, the repository's worktrees are
+  **seeded** into the database exactly once each (rank `1.0`, via
+  `Database::add`, only when not already present) so all worktree/branch
+  directories become jumpable by frecency without a prior visit. Seeding is
+  best-effort (git errors swallowed) and never inflates an already-present
+  entry's rank on repeat adds — real `add` visits are the only force that grows
+  it.
 
 ### 2.2 `query` — search and pick
 
@@ -209,6 +217,9 @@ one-for-one, plus one zjump-only extension:
 - **R-ENV-7** `_ZJUMP_PICK_TOP` — top-N count for the git-worktree DB-fallback
   used by `branch`/`worktree` when called without arguments and CWD is not inside
   a git repository. Parsed as a positive integer; default `10`.
+- **R-ENV-8** `_ZJUMP_AUTO_INDEX_DIRECTORY` — *(extension)* when exactly `"1"`,
+  `add` seeds the worktrees of the repo containing each added path into the
+  frecency database (R-ADD-10). Default `false` (off).
 
 ### 2.10 Process & error semantics
 
@@ -289,13 +300,29 @@ one-for-one, plus one zjump-only extension:
   interactive picker is displayed listing all worktrees in the current repo
   (format: `basename (branch)`). Selecting one jumps to it. Same single-offer
   fast path and out-of-repo DB-fallback as R-GIT-7.
+- **R-GIT-9** *(extension)* `zjump worktree --all` (`zz -W` / `zz --worktree-all`)
+  lists worktrees across **every** repository known to the frecency database,
+  ignoring the current directory (works from inside a repo). Repos are
+  deduplicated by canonical main-checkout path; each fzf label carries a
+  `[repo: <basename>]` suffix so same-named worktrees across repos stay
+  distinguishable. `[repo-keywords]` narrow the scan when given.
+- **R-GIT-10** *(extension)* Every `worktree`/`branch` lookup — named or picker,
+  with or without repo-keywords — **seeds** the resolved repository's worktrees
+  into the frecency database exactly once each (rank `1.0`, only when absent),
+  so a first `zz -w`/`zz -b` makes all of a repo's worktree/branch directories
+  jumpable by plain `zz <keyword>` afterward. Seeding is best-effort (a failed
+  DB open or git error only skips indexing, never fails the lookup).
+- **R-GIT-11** *(extension)* `zjump worktree --all` seeds every discovered
+  worktree path into the database on first use (same seed-once semantics as
+  R-GIT-10), so a first `zz -W` both lists and indexes all known worktrees.
 
 ### 2.13 `list` — combined directory/alias/branch/worktree overview
 
 `zjump list` is a zjump-only extension subcommand with **no zoxide equivalent**
 — zoxide's closest behavior is `zoxide query --list` (a flag, not a subcommand),
 and the git sections have no analog at all. Recorded as `R-LIST-*` here and
-mirrored in DESIGN.md §13.6.
+mirrored in the README's `zjump list` section (DESIGN.md documents upstream
+parity only, so extensions live in the README, not DESIGN.md).
 
 - **R-LIST-1** Bare `zjump list` ≈ `zjump query --list`: prints a single
   DIRECTORIES section, best-first, with PATH column. The ALIASES, BRANCHES,

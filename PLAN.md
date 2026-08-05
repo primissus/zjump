@@ -319,3 +319,31 @@ subcommand for a unified view of everything zjump tracks.
 See [`REQUIREMENTS.md` §2.13](./REQUIREMENTS.md) for the full `R-LIST-*`
 requirements and [`test/TEST-CASES.md` §6](./test/TEST-CASES.md) for the
 `L-01..L-16` test scenarios.
+
+---
+
+## 11. Phase 8 — worktree indexing: `zz -W`, `_ZJUMP_AUTO_INDEX_DIRECTORY`, `-w`/`-b` seeding (2026-08-05 extension)
+
+Beyond zoxide parity and Phases 6–7. Adds worktree/branch **indexing**: worktree
+paths get written into the frecency database so they're jumpable by plain
+`zz <keyword>` before ever being visited.
+
+- **`zz -W` / `zz --worktree-all`** (`zjump worktree --all`): fzf-picks a
+  worktree across **every** repo known to the frecency database, ignoring the
+  current directory (works from inside a repo). Repos are deduplicated by
+  canonical main-checkout path; each fzf label carries a `[repo: <basename>]`
+  suffix. `[repo-keywords]` narrow the scan.
+- **`_ZJUMP_AUTO_INDEX_DIRECTORY=1`** (off by default): every `zjump add` (i.e.
+  every hook-tracked `cd`) seeds the worktrees of the repository containing the
+  added path into the DB once each (rank `1.0`), costing one `git worktree
+  list` call per cd into a git repo.
+- **`zz -w` / `zz -b` seeding**: every `worktree`/`branch` lookup — named or
+  picker — seeds the resolved repo's worktrees into the DB, so a first lookup
+  makes all of a repo's worktree/branch directories frecency-jumpable.
+- **Seed-once semantics** shared by all three: a path already in the DB is left
+  alone (rank never inflated by re-seeding); a missing path is inserted at
+  `1.0` so it survives aging. Best-effort — git/DB failures never fail the
+  jump itself.
+
+See [`REQUIREMENTS.md` §2.12](./REQUIREMENTS.md) (`R-GIT-9`..`R-GIT-11`,
+`R-ADD-10`, `R-ENV-8`) for the full requirements.
