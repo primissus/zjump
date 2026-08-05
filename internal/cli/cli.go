@@ -200,6 +200,7 @@ Environment variables:
     _ZJUMP_AUTO_INDEX_DIRECTORY
                               Seed the worktrees/branches of each added repo
                               into the database on every add (=1) — see README
+    _ZJUMP_DOCTOR             Disable the shell script's hook doctor check (=0)
 `)
 }
 
@@ -216,5 +217,6 @@ func printCmdHelp(w io.Writer, name, cmdUsage string) {
     _ZJUMP_AUTO_INDEX_DIRECTORY
                               Seed the worktrees/branches of each added repo
                               into the database on every add (=1) — see README
+    _ZJUMP_DOCTOR             Disable the shell script's hook doctor check (=0)
 `)
 }

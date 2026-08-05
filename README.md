@@ -138,7 +138,11 @@ The `zjump` binary exposes nine subcommands. In everyday use you'll rarely call
 them directly — the `zz`/`zzi` shell functions and the tracking hook do it for you
 — but the full surface is documented here.
 
-Global flags: `-h`/`--help`, `-V`/`--version`. Every subcommand also accepts `-h`/`--help` and prints its own usage with flags.
+Global flags: `-h`/`--help`, `-V`/`--version`, plus `--debug` (enable debug
+logging) and `--log-file <PATH>` (log destination; default
+`/tmp/zjump-debug.log`). The pseudo-subcommands `zjump help` and `zjump version`
+are aliases for `-h`/`--help` and `-V`/`--version`. Every subcommand also
+accepts `-h`/`--help` and prints its own usage with flags.
 
 ### `zjump add <paths>...`
 
@@ -247,9 +251,11 @@ launching the same interactive fzf picker as bare `zz -w` but ignoring the
 current directory (so it works even when you're inside a repo). Repos are
 deduplicated by canonical main-checkout path; each entry's fzf label carries a
 `[repo: <basename>]` suffix so same-named worktrees across repos stay
-distinguishable. Wired to the shell as `zz -W` / `zz --worktree-all`. Also a
-zjump-only extension (no zoxide analog). Like the per-repo lookups, it seeds
-every discovered worktree path into the frecency database on first use.
+distinguishable. Optional `[repo-keywords]` narrow the scan to repositories
+matching the frecency query (best match wins, mirroring `branch`). Wired to
+the shell as `zz -W` / `zz --worktree-all`. Also a zjump-only extension (no
+zoxide analog). Like the per-repo lookups, it seeds every discovered worktree
+path into the frecency database on first use.
 
 ### `zjump list [keywords]...`
 
@@ -368,6 +374,12 @@ called; the rest are read on each invocation.
     into a git repository. Seeded entries are never rank-inflated on repeated
     visits (real `cd`s into a path are the only force that grows its rank).
   - zjump-only extension (no zoxide analog).
+- **`_ZJUMP_DOCTOR`**
+  - When set to `0`, the shell script's doctor check is disabled. The doctor
+    warns once if the tracking hook is missing from `PROMPT_COMMAND` /
+    `precmd_functions` after `eval "$(zjump init ...)"`. Set by the generated
+    script itself after the first warning; pre-set it to `0` to silence the
+    check entirely. Default: `1` (warn once).
 
 ## How it works
 

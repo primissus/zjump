@@ -332,8 +332,9 @@ Both `bash.tmpl` and `zsh.tmpl` share the same structure:
   or prompt. In bash `pwd` mode, additionally caches `__zjump_oldpwd` and only
   fires `add` when the directory actually changed.
 - `__zjump_z` — the smart wrapper that powers `zz`: `--`/`-`/`..`/path → `cd`;
-  `-a` → alias; `-b` → branch jump; `-w` → worktree jump; otherwise →
-  `zjump query --exclude "$(__zjump_pwd)" -- "$@"`.
+  `-a` → alias; `-b` → branch jump; `-w` → worktree jump; `-W`/`--worktree-all`
+  → `zjump worktree --all`; otherwise → `zjump query --exclude "$(__zjump_pwd)"
+  -- "$@"`.
 - `__zjump_zi` — `zjump query --interactive`.
 - `zz` / `zzi` — user-facing commands (only when `HasCmd`).
 - Completions (bash 4.4+, zsh with `zle`) — Space-Tab triggers interactive
@@ -378,6 +379,41 @@ Both support a no-arg interactive fzf picker. When CWD is not in a repo, the
 fallback scans the top-N (`_ZJUMP_PICK_TOP`, default 10) database entries for
 `.git` directories.
 
+### `worktree --all` — the all-repo picker (`zz -W`)
+
+`zjump worktree --all` (`-a`) lists worktrees across **every** repo known to the
+frecency database, ignoring the current directory (works from inside a repo).
+Implementation (`worktree.go`):
+
+1. Stream the whole database and collect every entry containing a `.git`
+   directory, deduplicating repos by canonical main-checkout path.
+2. Optional `[repo-keywords]` narrow the scan: the best DB match wins
+   (mirroring `branch`).
+3. Enumerate worktrees per repo; each fzf label carries a `[repo: <basename>]`
+   suffix so same-named worktrees across repos stay distinguishable.
+4. Seed every discovered worktree path into the DB (same seed-once semantics
+   below), so a first `zz -W` also makes them frecency-jumpable.
+
+### Seeding — worktree paths into the frecency DB
+
+Every `worktree`/`branch` lookup — named or picker, including `--all` — calls
+`seedRepoWorktrees(repoDir)` (`gitpick.go`), which inserts each of the repo's
+worktree paths into the frecency database once each at rank `1.0`. This makes
+never-visited worktree/branch directories jumpable by plain `zz <keyword>`
+after a first `zz -w`/`zz -b`/`zz -W`.
+
+Seed-once semantics: a path already in the DB is left alone (re-seeding never
+inflates its rank); a missing path is inserted at `1.0` so it survives aging.
+Seeding is best-effort — git or DB failures never fail the jump itself.
+
+### Auto-index on `add` (`_ZJUMP_AUTO_INDEX_DIRECTORY`)
+
+When `_ZJUMP_AUTO_INDEX_DIRECTORY=1` (`config.AutoIndexDirectory()`), every
+`zjump add` also seeds the worktrees of the repository containing each added
+path (`add.go`), so the shell hook's ordinary `cd` tracking keeps every repo's
+worktrees indexed. Off by default: it costs one `git worktree list` call per
+`cd` into a git repo.
+
 ---
 
 ## 10. fzf wrapper (`internal/fzf`)
@@ -406,7 +442,7 @@ Exit-code mapping:
 | killed | `fzf was terminated` |
 
 Used by: `query --interactive` (`zzi`), `edit`, and the no-arg
-`branch`/`worktree` pickers.
+`branch`/`worktree` pickers (including the all-repo `worktree --all` picker).
 
 fzf ≥ v0.51.0 is the documented minimum, but the version is **not enforced** at
 runtime.
@@ -460,6 +496,7 @@ home-directory exclude pattern.
 | `FzfOpts()` | `_ZJUMP_FZF_OPTS` | unset | Read only by `query -i`, never by `edit`. |
 | `Maxage()` | `_ZJUMP_MAXAGE` | `10000` | Parsed as u32. Aging ceiling. |
 | `PickTop()` | `_ZJUMP_PICK_TOP` | `10` | Must be > 0. DB fallback limit for branch/worktree pickers. |
+| `AutoIndexDirectory()` | `_ZJUMP_AUTO_INDEX_DIRECTORY` | `false` | True only when `"1"`. `add` also seeds the added path's repo worktrees (§9). |
 
 ---
 
@@ -513,11 +550,15 @@ Key behaviors:
 
 - Bare `zjump list` ≈ `zjump query --list`: a single DIRECTORIES section,
   best-first.
+- Section toggles are additive: `--aliases`, `--branches`, `--worktrees`
+  (git sections resolve their repo like `branch`/`worktree`; `--branches`
+  excludes detached worktrees, `--worktrees` includes them); `--no-dirs`
+  suppresses DIRECTORIES; `-s, --score` adds a SCORE column.
 - Empty requested sections print their header + a single `(none)` row.
 - `--json` emits structured JSON; requested-but-empty sections serialize as
   `[]` (not `null`).
 - `--all-repos` scans every DB entry for `.git` and enumerates worktrees across
-  all distinct repos (dedup by main-checkout path).
+  all distinct repos (dedup by main-checkout path), adding a REPO column.
 - `list` follows D-4: the database file is rewritten **only when** lazy
   deletions during iteration actually dirtied it.
 
