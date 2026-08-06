@@ -134,7 +134,7 @@ Core `zz` jumping works without it.
 
 ## Commands
 
-The `zjump` binary exposes nine subcommands. In everyday use you'll rarely call
+The `zjump` binary exposes ten subcommands. In everyday use you'll rarely call
 them directly — the `zz`/`zzi` shell functions and the tracking hook do it for you
 — but the full surface is documented here.
 
@@ -289,6 +289,32 @@ with **no zoxide equivalent** — zoxide's closest behavior is `zoxide query
   listing **only when** lazy deletions during `db.Stream.Next()` actually
   dirtied it. A pure listing (no stale or excluded entries purged) performs
   no file rewrite.
+
+### `zjump update`
+
+Self-update the installed binary from GitHub Releases. Downloads the archive
+matching this platform (`GOOS`/`GOARCH`), verifies its SHA256 against the
+release's `checksums.txt`, and atomically replaces the running binary. A
+zjump-only extension with **no zoxide equivalent**.
+
+| Flag | Description |
+| --- | --- |
+| `--check` | Print whether a newer release is available and exit without modifying anything. |
+| `--force` | Reinstall even when already at the latest version (useful for recovering a corrupted binary). |
+| `--version vX.Y.Z` | Install a specific release tag instead of the latest. |
+| `--prerelease` | Include prereleases when resolving "latest" (default resolves the latest **stable** release only). |
+
+- Resolution order: `--version` pins an exact tag; otherwise the latest
+  release is used (`--prerelease` widens that to the highest-versioned
+  non-draft release, e.g. a `-rc1`).
+- If already at the newest version (and no `--force`), it prints
+  `zjump already up to date (X.Y.Z)` and exits 0 without touching anything.
+- The asset name mirrors the goreleaser archives template
+  (`zjump_<ver>_<os>_<arch>.tar.gz`); an unsupported platform errors with a
+  link to the release so the correct asset can be fetched manually.
+- The binary is replaced with an atomic rename in its own directory, so a
+  crash mid-update never corrupts the existing install; the new version takes
+  effect on the next invocation.
 
 ## Configuration
 

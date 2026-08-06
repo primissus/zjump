@@ -10,7 +10,10 @@
   (2026-07-24 re-scope), `zjump list` — a zjump-only combined view of
   directories, aliases, branches, and worktrees — and worktree/branch
   indexing (2026-08-05): `worktree --all`/`zz -W`, `_ZJUMP_AUTO_INDEX_DIRECTORY`,
-  and `-w`/`-b` seeding). Source lives under
+  and `-w`/`-b` seeding). `zjump update` (2026-08-06) self-updates the binary
+  from GitHub Releases by downloading the matching goreleaser archive,
+  verifying its SHA256, and atomically replacing the running binary. Source
+  lives under
   `cmd/zjump` and `internal/*`;
   `go test ./...` is the dependency-free suite and
   `go test -tags shelltests ./...` adds the real bash/zsh/fzf/git integration

@@ -59,6 +59,8 @@ func Run(args []string) error {
 		return runWorktree(rest[1:])
 	case "list":
 		return runList(rest[1:])
+	case "update":
+		return runUpdate(rest[1:])
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return nil
@@ -185,6 +187,7 @@ Commands:
                               --all fzf-picks worktrees across all repos in DB
     list                       List directories (zoxide-like) plus opt-in aliases,
                               branches, and worktrees sections
+    update                     Update zjump to a newer version from GitHub Releases
 
 Run 'zjump <COMMAND> --help' for command-specific options.
 
