@@ -2,6 +2,10 @@
 
 # zjump
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![GitHub Release](https://img.shields.io/github/v/release/primissus/zjump)](https://github.com/primissus/zjump/releases)
+
 zjump is a **smarter cd command**, a Go reimplementation of
 [zoxide](https://github.com/ajeetdsouza/zoxide).
 
@@ -13,32 +17,46 @@ zjump works on **bash** and **zsh** (Linux and macOS).
 [Installation](#installation) •
 [Commands](#commands) •
 [Configuration](#configuration) •
-[How it works](#how-it-works)
+[How it works](#how-it-works) •
+[Development](#development) •
+[Contributing](#contributing)
 
 > **Scope.** zjump implements broad behavioral parity with zoxide for the
-> `add`, `query`, `remove`, `init`, and `edit` commands. The `import` command,
-> shells other than bash/zsh, and Windows are **out of scope**; the database is
-> a zjump-native format, not byte-compatible with zoxide's `db.zo`. See
+> `add`, `query`, `remove`, `init`, and `edit` commands. It also extends beyond
+> zoxide with directory aliases, git branch jumps, git worktree jumps, and a
+> combined `list` view of all three. The `import` command, shells other than
+> bash/zsh, and Windows are **out of scope**; the database is a zjump-native
+> format, not byte-compatible with zoxide's `db.zo`. See
 > [Deliberate deviations](#deliberate-deviations-from-zoxide).
 
 ## Getting started
 
 ```sh
-z foo              # cd into the highest-ranked directory matching foo
-z foo bar          # cd into the highest-ranked directory matching foo and bar
-z foo /            # cd into a subdirectory starting with foo
+zz foo              # cd into the highest-ranked directory matching foo
+zz foo bar          # cd into the highest-ranked directory matching foo and bar
+zz foo /            # cd into a subdirectory starting with foo
 
-z ~/foo            # z also works like a regular cd command
-z foo/             # cd into a relative path
-z ..               # cd one level up
-z -                # cd into the previous directory
+zz ~/foo            # zz also works like a regular cd command
+zz foo/             # cd into a relative path
+zz ..               # cd one level up
+zz -                # cd into the previous directory
+zz -- <path>        # cd into an exact path, bypassing keyword matching
 
-zi foo             # cd with interactive selection (using fzf)
+zzi foo             # cd with interactive selection (using fzf)
 
-z foo<SPACE><TAB>  # show interactive completions (bash 4.4+/zsh only)
+zz foo<SPACE><TAB>  # show interactive completions (bash 4.4+/zsh only)
+
+zz -a proj ~/src/proj  # create an alias 'proj' → ~/src/proj
+zz proj                # jump to the alias target (aliases beat frecency)
+zz -a                  # fzf-pick an alias to jump to
+zz -b main myrepo      # jump to the worktree where 'main' is checked out
+zz -b                  # fzf-pick a checked-out branch in the current repo
+zz -w api myrepo       # jump to a worktree by name (e.g. directory named 'api')
+zz -w                  # fzf-pick a worktree in the current repo
+zz -W                  # fzf-pick a worktree across every repo in the DB
 ```
 
-The `z` command tracks directories as you visit them and ranks them by
+The `zz` command tracks directories as you visit them and ranks them by
 **frecency** (frequency + recency), so the places you actually use bubble to the
 top. Read more about the [matching](#matching) and [scoring](#frecency-scoring)
 algorithms below.
@@ -49,22 +67,34 @@ zjump can be installed in 3 steps.
 
 ### 1. Install the binary
 
-zjump is distributed as source. You'll need **Go 1.23+** and a Unix system
-(Linux or macOS). From the repository root:
+**Quick install** (downloads the latest release):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/primissus/zjump/main/scripts/install.sh | bash
+```
+
+**From source** (requires Go 1.23+):
 
 ```sh
 # Build and install to /usr/local/bin (may require sudo):
-scripts/install.sh
+scripts/install.sh --build
 
 # ...or install to a directory of your choice (must be on your PATH):
-scripts/install.sh ~/.local/bin
+scripts/install.sh --build ~/.local/bin
 ```
 
 Or build the binary directly and place it on your `PATH` yourself:
 
 ```sh
+# From source:
 go build -o zjump ./cmd/zjump
+
+# Or install via Go toolchain:
+go install github.com/primissus/zjump/cmd/zjump@latest
 ```
+
+Pre-built binaries for Linux and macOS (amd64, arm64) are available on the
+[GitHub Releases](https://github.com/primissus/zjump/releases) page.
 
 ### 2. Set up zjump on your shell
 
@@ -101,18 +131,22 @@ tracking directories as you `cd` around.
 ### 3. Install fzf (optional)
 
 [fzf](https://github.com/junegunn/fzf) is a command-line fuzzy finder, used by
-zjump for interactive selection (`zi`, `zjump edit`) and Space-Tab completions.
-Core `z` jumping works without it.
+zjump for interactive selection (`zzi`, `zjump edit`) and Space-Tab completions.
+Core `zz` jumping works without it.
 
 > **Note:** the minimum supported fzf version is **v0.51.0**.
 
 ## Commands
 
-The `zjump` binary exposes five subcommands. In everyday use you'll rarely call
-them directly — the `z`/`zi` shell functions and the tracking hook do it for you
+The `zjump` binary exposes ten subcommands. In everyday use you'll rarely call
+them directly — the `zz`/`zzi` shell functions and the tracking hook do it for you
 — but the full surface is documented here.
 
-Global flags: `-h`/`--help`, `-V`/`--version`.
+Global flags: `-h`/`--help`, `-V`/`--version`, plus `--debug` (enable debug
+logging) and `--log-file <PATH>` (log destination; default
+`/tmp/zjump-debug.log`). The pseudo-subcommands `zjump help` and `zjump version`
+are aliases for `-h`/`--help` and `-V`/`--version`. Every subcommand also
+accepts `-h`/`--help` and prints its own usage with flags.
 
 ### `zjump add <paths>...`
 
@@ -133,7 +167,7 @@ This is what the shell hook runs on every navigation.
 
 ### `zjump query [keywords]...`
 
-Search the database and print matching directories. This is what `z`/`zi`
+Search the database and print matching directories. This is what `zz`/`zzi`
 invoke under the hood.
 
 | Flag | Description |
@@ -143,7 +177,7 @@ invoke under the hood.
 | `-i`, `--interactive` | Select a match interactively via fzf. Conflicts with `--list`. |
 | `-s`, `--score` | Prefix each result with its decayed frecency score. |
 | `-a`, `--all` | Include directories that no longer exist (disables the existence filter). |
-| `--exclude <path>` | Skip this exact path in the results (never deletes it; used by `z` to exclude `$PWD`). |
+| `--exclude <path>` | Skip this exact path in the results (never deletes it; used by `zz` to exclude `$PWD`). |
 | `--base-dir <path>` | Only return matches that are component-wise under this directory. |
 
 - Default mode prints the single best match, or errors `no match found`.
@@ -158,7 +192,7 @@ neither is an error (`path not found in database: <path>`).
 
 ### `zjump init <bash|zsh>`
 
-Print the shell integration script (the `z`/`zi` functions, the tracking hook,
+Print the shell integration script (the `zz`/`zzi` functions, the tracking hook,
 and completions). You source its output, typically via
 `eval "$(zjump init bash)"`. See [Configuration](#configuration) for its flags.
 
@@ -179,6 +213,125 @@ inspect and adjust entries. Key bindings:
 > `edit` re-sorts the list after every change, so the ordering never goes stale
 > mid-session (see [deviations](#deliberate-deviations-from-zoxide)).
 
+### `zjump alias [<name> <dir>]`
+
+Manage named directory shortcuts (aliases) that live outside the frecency
+database.
+
+- `zjump alias` — list all aliases (one per line, `name<TAB>path`, sorted by name).
+- `zjump alias <name> <dir>` — create or overwrite an alias. `dir` must be an
+  existing directory. Names cannot contain `/` or start with `-`.
+- `zjump alias -d|--delete <name>` — remove an alias.
+- `zjump alias --pick` — interactively select an alias via fzf and print its
+  path (wired to the shell as bare `zz -a`). Cannot be combined with
+  `--delete` or positional args; errors when no aliases exist.
+
+Aliases are stored in `<data-dir>/aliases` — a separate versioned binary file
+with the same crash-safe atomic writes as the database.
+
+When `z <name>` matches an alias (case-sensitive, single keyword, default mode),
+the alias target is used directly — no frecency lookup. Multi-keyword queries
+and `--list`/`--interactive` modes bypass alias resolution.
+
+### `zjump branch [<branch> [repo-keywords...]]`
+
+Print the worktree path (including the main checkout) where `<branch>` is
+checked out. When `[repo-keywords]` are given, they are matched against the
+frecency database to locate the repository; otherwise the current working
+directory's repository is used. Never creates worktrees — read-only.
+
+With **no arguments**, launches an interactive fzf picker listing every
+branch across the current repo's worktrees (wired to the shell as bare
+`zz -b`). Outside a git repository, the picker falls back to the top
+`_ZJUMP_PICK_TOP` frecency-ranked worktree entries in the database.
+
+### `zjump worktree [<name> [repo-keywords...]]`
+
+Print a worktree path matching `<name>` by directory basename first, then by
+branch shortname. Multiple matches produce an ambiguity error. Repository
+resolution works the same as `branch`.
+
+With **no arguments**, launches an interactive fzf picker listing all of the
+current repo's worktrees (wired to the shell as bare `zz -w`), with the same
+database fallback as the bare `branch` picker.
+
+Every `worktree`/`branch` lookup also **seeds** the resolved repository's
+worktree paths into the frecency database (once each, rank 1.0, via
+`database.Add` when not already present), so a first `zz -w`/`zz -b` makes all
+of a repo's worktrees jumpable by plain `zz <keyword>` afterward.
+
+### `zjump worktree --all`
+
+List worktrees across **every** repository known to the frecency database,
+launching the same interactive fzf picker as bare `zz -w` but ignoring the
+current directory (so it works even when you're inside a repo). Repos are
+deduplicated by canonical main-checkout path; each entry's fzf label carries a
+`[repo: <basename>]` suffix so same-named worktrees across repos stay
+distinguishable. Optional `[repo-keywords]` narrow the scan to repositories
+matching the frecency query (best match wins, mirroring `branch`). Wired to
+the shell as `zz -W` / `zz --worktree-all`. Also a zjump-only extension (no
+zoxide analog). Like the per-repo lookups, it seeds every discovered worktree
+path into the frecency database on first use.
+
+### `zjump list [keywords]...`
+
+List the tracked directories ("DIRECTORIES" section by default) plus optional
+sections for aliases, branches, and worktrees. This is a zjump-only extension
+with **no zoxide equivalent** — zoxide's closest behavior is `zoxide query
+--list` (a flag, not a subcommand), and the git sections have no analog at all.
+
+| Flag | Description |
+| --- | --- |
+| `[keywords]...` | Substrings to filter the DIRECTORIES section (same [matching rules](#matching) as `query`). When `--branches`/`--worktrees` are set, they double as repo-keywords (best DB match wins, mirroring `branch`). |
+| `-s`, `--score` | Add a SCORE column to DIRECTORIES (`%6.1f`, clamped to `9999.0`) — same formatting as `query --score`. |
+| `-a`, `--all` | Include directories that no longer exist (disables the existence filter) — zoxide's `query --all` semantics. |
+| `--aliases` | Add an ALIASES section (sorted by name). |
+| `--branches` | Add a BRANCHES section. Repo defaults to `git.RepoRoot($PWD)`; keywords override. Detached worktrees are excluded. |
+| `--worktrees` | Add a WORKTREES section. Same repo resolution as `--branches`. Includes detached worktrees (labelled `(detached)`). |
+| `--no-dirs` | Suppress the DIRECTORIES section. Combine with `--aliases`/`--branches`/`--worktrees` to print only those. |
+| `--all-repos` | Scan every DB entry containing a `.git` and enumerate worktrees across all distinct repos. Adds a REPO leading column to the BRANCHES/WORKTREES sections; deduplicates by canonical main-checkout path. |
+| `--json` | Emit a structured JSON object instead of the pretty text table. `directories` is always present (may be `[]`); the optional sections appear **only when requested**, as `[]` (not `null`) even when empty. |
+
+- Bare `zjump list` ≈ `zjump query --list`: a single DIRECTORIES section,
+  best-first, with a PATH column. ALIASES/BRANCHES/WORKTREES are absent by
+  default; pass `--aliases`, `--branches`, `--worktrees` to opt them in.
+- Empty requested sections print their header + a single `(none)` row so you
+  can distinguish "asked for, none configured" from a suppressed section.
+- If CWD isn't a Git repository and no `[keywords]` are given, BRANCHES /
+  WORKTREES print their header + `(none)` without erroring — `[keywords]`
+  force repo resolution via the frecency database and error on no match (same
+  behavior as `zjump branch`/`zjump worktree` with keywords).
+- `list` follows deviation **D-4**: the database file is rewritten after the
+  listing **only when** lazy deletions during `db.Stream.Next()` actually
+  dirtied it. A pure listing (no stale or excluded entries purged) performs
+  no file rewrite.
+
+### `zjump update`
+
+Self-update the installed binary from GitHub Releases. Downloads the archive
+matching this platform (`GOOS`/`GOARCH`), verifies its SHA256 against the
+release's `checksums.txt`, and atomically replaces the running binary. A
+zjump-only extension with **no zoxide equivalent**.
+
+| Flag | Description |
+| --- | --- |
+| `--check` | Print whether a newer release is available and exit without modifying anything. |
+| `--force` | Reinstall even when already at the latest version (useful for recovering a corrupted binary). |
+| `--version vX.Y.Z` | Install a specific release tag instead of the latest. |
+| `--prerelease` | Include prereleases when resolving "latest" (default resolves the latest **stable** release only). |
+
+- Resolution order: `--version` pins an exact tag; otherwise the latest
+  release is used (`--prerelease` widens that to the highest-versioned
+  non-draft release, e.g. a `-rc1`).
+- If already at the newest version (and no `--force`), it prints
+  `zjump already up to date (X.Y.Z)` and exits 0 without touching anything.
+- The asset name mirrors the goreleaser archives template
+  (`zjump_<ver>_<os>_<arch>.tar.gz`); an unsupported platform errors with a
+  link to the release so the correct asset can be fetched manually.
+- The binary is replaced with an atomic rename in its own directory, so a
+  crash mid-update never corrupts the existing install; the new version takes
+  effect on the next invocation.
+
 ## Configuration
 
 ### `init` flags
@@ -186,7 +339,7 @@ inspect and adjust entries. Key bindings:
 When calling `zjump init`, the following flags are available:
 
 - **`--cmd <cmd>`**
-  - Changes the prefix of the `z` and `zi` commands. Default: `z`.
+  - Changes the prefix of the `zz` and `zzi` commands. Default: `zz`.
   - `--cmd j` changes them to `j` / `ji`.
   - `--cmd cd` replaces the `cd` command.
 - **`--hook <hook>`**
@@ -202,9 +355,16 @@ When calling `zjump init`, the following flags are available:
     emulated: the hook runs at every prompt but only calls `zjump add` when the
     directory actually changed.
 - **`--no-cmd`** (alias `--no-aliases`)
-  - Prevents zjump from defining the `z` and `zi` commands. The underlying
+  - Prevents zjump from defining the `zz` and `zzi` commands. The underlying
     functions remain available as `__zjump_z` and `__zjump_zi` if you want to
     wire them up yourself.
+- **`--debug[=PATH]`** (zjump-only addition beyond parity)
+  - Bake debug logging into the generated integration script. Every `zz`
+    and `zjump` subprocess invocation will write timestamped log lines
+    (including errors) to the given file.
+  - If `PATH` is omitted, logs go to a default location
+    (typically `/tmp/zjump-debug.log`).
+  - Resolved to an absolute path at init time.
 
 ### Environment variables
 
@@ -222,7 +382,7 @@ called; the rest are read on each invocation.
     | macOS | `$HOME/Library/Application Support/zjump` |
 
 - **`_ZJUMP_ECHO`**
-  - When set to `1`, `z` prints the matched directory before navigating to it.
+  - When set to `1`, `zz` prints the matched directory before navigating to it.
 - **`_ZJUMP_EXCLUDE_DIRS`**
   - Directories to exclude from the database, as a `:`-separated list of
     [globs](https://man7.org/linux/man-pages/man7/glob.7.html) (e.g.
@@ -241,10 +401,31 @@ called; the rest are read on each invocation.
     rescaled and pruned. Parsed as an unsigned integer. Default: `10000`.
 - **`_ZJUMP_RESOLVE_SYMLINKS`**
   - When set to `1`, symlinks are resolved before directories are added.
+- **`_ZJUMP_PICK_TOP`**
+  - The number of frecency-ranked git-worktree directories listed in the
+    database-fallback when `-b` / `-w` are called with no argument and the
+    current directory is not inside a git repository. Must be a positive
+    integer. Default: `10`.
+- **`_ZJUMP_AUTO_INDEX_DIRECTORY`**
+  - When set to `1`, every `zjump add` (i.e. every `cd` tracked by the shell
+    hook) also **seeds** the worktrees of the repository containing the added
+    path into the frecency database — once each, with rank 1.0, only when not
+    already present — so all of a repo's worktree/branch directories become
+    jumpable by `zz <keyword>` without ever having visited them.
+  - Deliberately off by default: it adds one `git worktree list` call per `cd`
+    into a git repository. Seeded entries are never rank-inflated on repeated
+    visits (real `cd`s into a path are the only force that grows its rank).
+  - zjump-only extension (no zoxide analog).
+- **`_ZJUMP_DOCTOR`**
+  - When set to `0`, the shell script's doctor check is disabled. The doctor
+    warns once if the tracking hook is missing from `PROMPT_COMMAND` /
+    `precmd_functions` after `eval "$(zjump init ...)"`. Set by the generated
+    script itself after the first warning; pre-set it to `0` to silence the
+    check entirely. Default: `1` (warn once).
 
 ## How it works
 
-zjump is a stateless, short-lived binary. Every `z`/`add`/`query` invocation
+zjump is a stateless, short-lived binary. Every `zz`/`add`/`query` invocation
 opens a single database file, does one unit of work, and (only when something
 changed) atomically rewrites it. There is no daemon — the shell hook simply runs
 `zjump add` as you navigate.
@@ -320,10 +501,26 @@ go test ./...                     # fast, dependency-free test suite
 go test -tags shelltests ./...    # also run real bash/zsh/fzf integration tests
 ```
 
-See [`REQUIREMENTS.md`](./REQUIREMENTS.md) for the scope contract (stable `R-*`
-IDs), [`PLAN.md`](./PLAN.md) for the roadmap, and
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) / [`DESIGN.md`](./DESIGN.md) for the
-zoxide reference material zjump is built against.
+For the full development guide — environment setup, testing, linting, code
+conventions, debugging, and release workflow — see
+[`docs/development.md`](./docs/development.md). For a deep dive into zjump's
+internal architecture and package layout, see
+[`docs/architecture.md`](./docs/architecture.md).
+
+[`REQUIREMENTS.md`](./REQUIREMENTS.md) defines the scope contract (stable `R-*`
+IDs); [`PLAN.md`](./PLAN.md) tracks the roadmap;
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) / [`DESIGN.md`](./DESIGN.md) document the
+upstream zoxide reference material zjump is built against.
+
+## Contributing
+
+Contributions are welcome! See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for setup,
+conventions, scope discipline, and the pull-request process. Please open an
+issue first for anything outside the current scope.
+
+## License
+
+zjump is licensed under the [MIT License](./LICENSE).
 
 ## Credit
 
