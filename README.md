@@ -14,6 +14,7 @@ them in just a few keystrokes.<br />
 zjump works on **bash** and **zsh** (Linux and macOS).
 
 [Getting started](#getting-started) •
+[Special features](#special-features) •
 [Installation](#installation) •
 [Commands](#commands) •
 [Configuration](#configuration) •
@@ -46,11 +47,16 @@ zzi foo             # cd with interactive selection (using fzf)
 
 zz foo<SPACE><TAB>  # show interactive completions (bash 4.4+/zsh only)
 
-zz -a proj ~/src/proj  # create an alias 'proj' → ~/src/proj
-zz proj                # jump to the alias target (aliases beat frecency)
+# --- Alias features ---
+zz -a lngName this-is-a-long-complex-name-v2  # create an alias 'lngName' → long dir
+zz lngName                                    # jump to the alias target (aliases beat frecency)
 zz -a                  # fzf-pick an alias to jump to
+
+# --- Git branch jumps ---
 zz -b main myrepo      # jump to the worktree where 'main' is checked out
 zz -b                  # fzf-pick a checked-out branch in the current repo
+
+# --- Git worktree jumps ---
 zz -w api myrepo       # jump to a worktree by name (e.g. directory named 'api')
 zz -w                  # fzf-pick a worktree in the current repo
 zz -W                  # fzf-pick a worktree across every repo in the DB
@@ -61,13 +67,93 @@ The `zz` command tracks directories as you visit them and ranks them by
 top. Read more about the [matching](#matching) and [scoring](#frecency-scoring)
 algorithms below.
 
+## Special features
+
+Frecency covers the "directories I visit often" case, but a lot of everyday
+navigation is about **git**, not visit frequency. zjump ships three extensions
+with no zoxide equivalent for exactly those cases: named aliases, branch jumps,
+and worktree jumps.
+
+### Named aliases
+
+Some directories are awkward to reach by frecency: long or generic paths you
+visit rarely, projects that are checked out once and then dormant, or paths you
+want to remember by a name rather than by how often you `cd` into them.
+
+```sh
+zz -a lngName this-is-a-long-complex-name-v2  # 31 chars to type → 7
+zz -a lngV1 this-is-a-long-complex-name-v1    # old versions keep their alias
+
+zz lngName                                    # jump instantly, no tab-complete hunt
+zz lngV1                                      # aliases beat frecency — always
+
+zz -a                                         # no name? fzf-pick an alias
+```
+
+Aliases map long, versioned directory names to short mnemonics you choose — so
+`zz lngV1` still works even after the project is renamed to `v3` and you haven't
+visited it in months.
+
+Aliases live outside the frecency database, never age away, and always win over
+keyword matching — so `zz lngName` goes where you named, no matter how long
+it's been since you visited.
+
+### Git branch jumps
+
+When a branch is checked out in a worktree, "jumping to it" means remembering
+`git worktree list`, parsing the output, and `cd`-ing by hand. zjump does it in
+one keystroke:
+
+```sh
+zz -b main myrepo       # cd into the worktree where 'main' is checked out
+zz -b main              # ...in the current repo
+zz -b                   # not sure which branch? fzf-pick it
+```
+
+This is the fastest way to switch *where* you're working when you use one
+worktree per branch — no need to remember which directory holds which branch.
+
+### Git worktree jumps
+
+Worktree directories are usually named after their branch or purpose (e.g.
+`api`, `feature-login`), which makes them hard to find by frecency alone since
+you visit each one rarely. zjump resolves them for you:
+
+```sh
+zz -w api myrepo        # cd into the worktree named 'api'
+zz -w                   # fzf-pick a worktree in the current repo
+zz -W                   # fzf-pick a worktree across EVERY repo in your DB
+```
+
+`zz -W` scans every repository zjump has ever seen — handy when you have a
+checkout spread across several repos and can't remember where it lives.
+
+Every branch/worktree lookup also **seeds** the repository's worktree paths
+into the frecency database, so after one `zz -w`/`zz -b` you can jump to any of
+its worktrees with a plain `zz <keyword>`. Set
+`_ZJUMP_AUTO_INDEX_DIRECTORY=1` to have every `cd` into a repo seed its
+worktrees automatically.
+
 ## Installation
 
 zjump can be installed in 3 steps.
 
 ### 1. Install the binary
 
-**Quick install** (downloads the latest release):
+**Homebrew** (macOS or Linuxbrew; recommended):
+
+```sh
+brew tap primissus/tap
+brew install zjump
+```
+
+Or one-shot:
+
+```sh
+brew install primissus/tap/zjump
+```
+
+**Quick install script** (downloads the latest release):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/primissus/zjump/main/scripts/install.sh | bash

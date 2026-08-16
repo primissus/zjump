@@ -2,6 +2,9 @@
 /zjump
 /bin/
 
+# GoReleaser snapshot artifacts
+/dist/
+
 # Go
 *.test
 *.out

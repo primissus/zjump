@@ -15,8 +15,9 @@ import (
 	"zjump/internal/glob"
 )
 
-// Version is zjump's version string.
-const Version = "0.1.0-dev"
+// Version is zjump's version string. May be overridden at link time via
+// -ldflags "-X zjump/internal/cli.Version=<v>" (used by GoReleaser releases).
+var Version = "0.1.0-dev"
 
 // Run dispatches a subcommand. It returns nil on success, an errs.SilentExit to
 // stop with a specific code and no message, or a normal error (printed by main

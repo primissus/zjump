@@ -1,0 +1,67 @@
+# GoReleaser configuration for zjump.
+# See https://goreleaser.com for full reference.
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: zjump
+    main: ./cmd/zjump
+    binary: zjump
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X zjump/internal/cli.Version={{.Version}}
+
+archives:
+  - formats: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  draft: false
+  prerelease: auto
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - Merge pull request
+      - Merge branch
+
+homebrew_casks:
+  - name: zjump
+    homepage: https://github.com/primissus/zjump
+    description: Frecency-based directory-jumping CLI tool (Go reimplementation of zoxide).
+    binaries:
+      - zjump
+    url:
+      verified: github.com/primissus/zjump
+    repository:
+      owner: primissus
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_msg_template: "Brew cask: update zjump to {{ .Tag }}"
+    caveats: |
+      Add the shell hook to your rc file, e.g.:
+        eval "$(zjump init bash)"   # or: zjump init zsh
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/zjump"]
+          end
