@@ -46,6 +46,8 @@ func Run(args []string) error {
 		return runAdd(rest[1:])
 	case "query":
 		return runQuery(rest[1:])
+	case "index":
+		return runIndex(rest[1:])
 	case "remove":
 		return runRemove(rest[1:])
 	case "init":
@@ -178,6 +180,7 @@ Global flags:
 Commands:
     add <paths>...             Add a directory or increment its rank
     query [keywords]...        Search for and print a matching directory
+    index <root>...            Bulk-scan directories for git repositories
     remove [paths]...          Remove directories from the database
     init <bash|zsh>            Print the shell integration script
     edit                       Interactively browse/edit the database (needs fzf)

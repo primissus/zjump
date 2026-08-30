@@ -6,9 +6,28 @@ package git
 import (
 	"bufio"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
+
+// IsRepoRoot reports whether path is the root of a git repository: it is iff
+// "<path>/.git" exists as a directory OR a regular file. The file form is what a
+// linked worktree's root carries, so a visited worktree root counts as a repo
+// root too and can enumerate its siblings (PLAN-GIT.md §2, R2-IDX-1).
+//
+// This is a single os.Lstat — no `git` subprocess. Lstat (not Stat) so a `.git`
+// that is itself a symlink is not silently followed and mistaken for a repo.
+// zjump extension (D-6): zoxide has no repo-root concept.
+func IsRepoRoot(path string) bool {
+	info, err := os.Lstat(filepath.Join(path, ".git"))
+	if err != nil {
+		return false
+	}
+	mode := info.Mode()
+	return mode.IsDir() || mode.IsRegular()
+}
 
 // Worktree describes one entry from `git worktree list --porcelain`.
 type Worktree struct {

@@ -94,8 +94,14 @@ func runAdd(args []string) error {
 			return fmt.Errorf("not a directory: %s", resolved)
 		}
 
-		database.AddUpdate(resolved, score, now, db.KindDir)
-		log.Debugf("add: added %s (score=%.1f)", resolved, score)
+		// D-6: a repo root is typed KindRepo (auto-typed on add, G-4); an
+		// existing dir entry is upgraded in place, never downgraded (PLAN-GIT §2).
+		kind := db.KindDir
+		if git.IsRepoRoot(resolved) {
+			kind = db.KindRepo
+		}
+		database.AddUpdate(resolved, score, now, kind)
+		log.Debugf("add: added %s (score=%.1f, kind=%d)", resolved, score, kind)
 
 		// _ZJUMP_AUTO_INDEX_DIRECTORY=1: seed the worktrees (and branches) of
 		// the repository containing this path, once each, so they become
