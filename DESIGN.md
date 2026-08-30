@@ -431,6 +431,7 @@ This checklist enumerates the full zoxide CLI surface — commands, subcommands,
 |---|---|---|
 | `zoxide` (bare invocation help) | Top-level `--help`/`--version`, dispatch to subcommands | Done (`zjump --help`; bare `zjump` prints usage) |
 | `--version` (propagated to all subcommands) | Print version | Done (`-V`/`--version`) |
+| Per-subcommand `-h`/`--help` | Print command-specific usage, flags, and environment variables | Done (v0.4.0) |
 
 ### `add`
 

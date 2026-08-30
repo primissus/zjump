@@ -3,7 +3,7 @@ package fzf
 import (
 	"testing"
 
-	"zjump/internal/errs"
+	"github.com/primissus/zjump/internal/errs"
 )
 
 // TestClassifyExit covers the full fzf exit-code table (R-FZF-5), including the

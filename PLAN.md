@@ -196,7 +196,7 @@ alongside each phase (AGENTS.md), not deferred.
   pwd-diff), `_ZJUMP_ECHO`/`_ZJUMP_RESOLVE_SYMLINKS` wiring, `--cmd`/`--no-cmd`/
   `--hook`.
 - **Exit:** `eval "$(zjump init zsh|bash)"` in a real shell tracks directories
-  and `z <kw>` jumps (A-1). Shell tests gated behind a build tag.
+  and `zz <kw>` jumps (A-1). Shell tests gated behind a build tag.
 - **Covers:** R-INIT-1..8.
 
 ### Phase 4 — fzf integration (`query -i`, `zi`)
@@ -268,3 +268,82 @@ Mirror zoxide's split (ARCHITECTURE.md §10, DESIGN.md §11):
 - **F-3** the `import` subcommand (six sources).
 - **F-4** Windows / cross-platform (PowerShell, `cygpath`, UNC, `which.exe`).
 - **F-5** optional `_ZO_*` env-var fallback for drop-in familiarity.
+
+---
+
+## 9. Phase 6 — aliases & git jumps (2026-07-24 extension re-scope)
+
+Beyond zoxide parity. User approved re-scope to add:
+
+- **Directory aliases** (`z <alias>`, `z -a <name> <dir>`) backed by a separate
+  versioned binary store (`internal/alias`, format magic `ZJAL`) alongside the
+  database. Alias resolution is case-sensitive exact-match, beats frecency (but
+  not local directories), and applies only in default query mode.
+- **Git branch/worktree jumps** (`z -b <branch> [repo]`, `z -w <name> [repo]`)
+  via `internal/git` (porcelain parser + exec layer). Both are read-only —
+  they never create worktrees. Repo resolution: omitted → current CWD's repo;
+  given → frecency query (must resolve to a git dir).
+
+A `writeAtomic` → `internal/atomic` refactor (`Write` exported) eliminates
+duplication between the DB and alias store.
+
+See [`REQUIREMENTS.md` §2.11–§2.12](./REQUIREMENTS.md) for the full `R-ALS-*`
+and `R-GIT-*` requirements.
+
+---
+
+## 10. Phase 7 — `zjump list` combined overview (2026-07-28 extension)
+
+Beyond zoxide parity and the Phase 6 extensions. Adds a new zjump-only
+subcommand for a unified view of everything zjump tracks.
+
+- **`zjump list [keywords]...`** (new subcommand, no zoxide equivalent) prints
+  the DIRECTORIES section by default (zoxide-`query --list`-like), plus opt-in
+  ALIASES, BRANCHES, and WORKTREES sections via `--aliases` / `--branches` /
+  `--worktrees`. `--no-dirs` suppresses the always-on DIRECTORIES section.
+- **Score column** opt-in via `-s, --score` (mirrors `query --score`'s
+  `%6.1f` clamped formatting). **All-mode** `--all` preserves zoxide's
+  `query --all` semantics.
+- **Repo scope for the git sections** mirrors `zjump branch`/`worktree`:
+  default `git.RepoRoot($PWD)`, override via positional `[repo-keywords]`
+  resolved through the frecency DB; out-of-repo + no keywords → empty section
+  with `(none)` body and no error. `--all-repos` switches to a DB-wide scan
+  with a REPO leading column, deduplicated by canonical main-checkout path.
+- **Structured output** via `--json`: `directories` always present (may be
+  `[]`), other sections `omitempty` by request; requested-but-empty sections
+  serialize as `[]` (not `null`) for downstream disambiguation.
+- **D-4 preserved**: `database.Save()` runs unconditionally after iteration
+  but is a no-op when nothing was lazy-deleted; a pure listing triggers no
+  file rewrite.
+
+See [`REQUIREMENTS.md` §2.13](./REQUIREMENTS.md) for the full `R-LIST-*`
+requirements and [`test/TEST-CASES.md` §6](./test/TEST-CASES.md) for the
+`L-01..L-16` test scenarios.
+
+---
+
+## 11. Phase 8 — worktree indexing: `zz -W`, `_ZJUMP_AUTO_INDEX_DIRECTORY`, `-w`/`-b` seeding (2026-08-05 extension)
+
+Beyond zoxide parity and Phases 6–7. Adds worktree/branch **indexing**: worktree
+paths get written into the frecency database so they're jumpable by plain
+`zz <keyword>` before ever being visited.
+
+- **`zz -W` / `zz --worktree-all`** (`zjump worktree --all`): fzf-picks a
+  worktree across **every** repo known to the frecency database, ignoring the
+  current directory (works from inside a repo). Repos are deduplicated by
+  canonical main-checkout path; each fzf label carries a `[repo: <basename>]`
+  suffix. `[repo-keywords]` narrow the scan.
+- **`_ZJUMP_AUTO_INDEX_DIRECTORY=1`** (off by default): every `zjump add` (i.e.
+  every hook-tracked `cd`) seeds the worktrees of the repository containing the
+  added path into the DB once each (rank `1.0`), costing one `git worktree
+  list` call per cd into a git repo.
+- **`zz -w` / `zz -b` seeding**: every `worktree`/`branch` lookup — named or
+  picker — seeds the resolved repo's worktrees into the DB, so a first lookup
+  makes all of a repo's worktree/branch directories frecency-jumpable.
+- **Seed-once semantics** shared by all three: a path already in the DB is left
+  alone (rank never inflated by re-seeding); a missing path is inserted at
+  `1.0` so it survives aging. Best-effort — git/DB failures never fail the
+  jump itself.
+
+See [`REQUIREMENTS.md` §2.12](./REQUIREMENTS.md) (`R-GIT-9`..`R-GIT-11`,
+`R-ADD-10`, `R-ENV-8`) for the full requirements.

@@ -3,7 +3,7 @@ package db
 import (
 	"os"
 
-	"zjump/internal/glob"
+	"github.com/primissus/zjump/internal/glob"
 )
 
 // StreamOptions configures a candidate Stream. Build it with NewStreamOptions

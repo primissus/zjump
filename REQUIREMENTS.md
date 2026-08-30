@@ -30,6 +30,7 @@ Decisions locked with the user:
 | `import` subcommand | Out of scope |
 | DB format | zjump-native — **not** byte-compatible with zoxide's `db.zo` |
 | Target platforms | Unix (Linux, macOS). Windows out of scope |
+| **Extensions (2026-07-24 re-scope; 2026-08-05 worktree indexing)** | Aliases (§2.11) + git branch/worktree jumps (§2.12) + worktree indexing (`worktree --all`/`zz -W`, `_ZJUMP_AUTO_INDEX_DIRECTORY`, `-w`/`-b` seeding) |
 
 ---
 
@@ -53,6 +54,14 @@ Decisions locked with the user:
 - **R-ADD-8** After any change, run the aging pass (R-DB-4) using
   `_ZJUMP_MAXAGE`, then save atomically.
 - **R-ADD-9** Error on an invalid system clock (time before the Unix epoch).
+- **R-ADD-10** *(extension)* When `_ZJUMP_AUTO_INDEX_DIRECTORY=1`, after adding
+  each path that lies inside a git repository, the repository's worktrees are
+  **seeded** into the database exactly once each (rank `1.0`, via
+  `Database::add`, only when not already present) so all worktree/branch
+  directories become jumpable by frecency without a prior visit. Seeding is
+  best-effort (git errors swallowed) and never inflates an already-present
+  entry's rank on repeat adds — real `add` visits are the only force that grows
+  it.
 
 ### 2.2 `query` — search and pick
 
@@ -191,7 +200,7 @@ Decisions locked with the user:
 ### 2.9 Environment variables
 
 Six variables, `_ZJUMP_*`-prefixed, mirroring zoxide's `_ZO_*` semantics
-one-for-one:
+one-for-one, plus one zjump-only extension:
 
 - **R-ENV-1** `_ZJUMP_DATA_DIR` — data directory for the DB file; must be an
   absolute path (validated unconditionally), else error.
@@ -205,6 +214,12 @@ one-for-one:
   float; default `10000`.
 - **R-ENV-6** `_ZJUMP_RESOLVE_SYMLINKS` — resolve symlinks in `add`/`query`;
   true only when the value is exactly `"1"`.
+- **R-ENV-7** `_ZJUMP_PICK_TOP` — top-N count for the git-worktree DB-fallback
+  used by `branch`/`worktree` when called without arguments and CWD is not inside
+  a git repository. Parsed as a positive integer; default `10`.
+- **R-ENV-8** `_ZJUMP_AUTO_INDEX_DIRECTORY` — *(extension)* when exactly `"1"`,
+  `add` seeds the worktrees of the repo containing each added path into the
+  frecency database (R-ADD-10). Default `false` (off).
 
 ### 2.10 Process & error semantics
 
@@ -219,8 +234,132 @@ one-for-one:
   trace/panic dump.
 - **R-ERR-4** The invalid-system-clock error (system time before the Unix epoch)
   applies to **every** subcommand that reads the current time — `add` (R-ADD-9),
-  `query`, and `edit`. `remove` never reads the clock and therefore has no
-  clock-error case.
+   `query`, and `edit`. `remove` never reads the clock and therefore has no
+   clock-error case.
+
+### 2.11 `alias` — named directory shortcuts
+
+- **R-ALS-1** `zjump alias` (no args) lists all aliases as `name<TAB>path`,
+  one per line, sorted by name.
+- **R-ALS-2** `zjump alias <name> <dir>` creates or overwrites an alias.
+  `name` is validated: non-empty, no `/`, no `\n`/`\r`, not `.`/`..`, no
+  leading `-`. `dir` is resolved (lexically or canonical per
+  `_ZJUMP_RESOLVE_SYMLINKS`) and must be an existing directory; exclude-globs
+  are NOT applied (explicit user intent).
+- **R-ALS-3** `zjump alias -d|--delete <name>` removes the alias; errors
+  `"alias not found: <name>"` when absent.
+- **R-ALS-4** Aliases are stored in a separate zjump-native versioned binary
+  file (`aliases`) in the same data directory as the database, with the same
+  atomic-write discipline (via `internal/atomic`).
+- **R-ALS-5** `zjump query <keyword>` (default mode, single keyword) resolves
+  an exact case-sensitive alias match **before** falling through to frecency.
+  `--list` and `--interactive` remain pure frecency. Multi-keyword queries
+  (`z foo bar`) never trigger alias resolution.
+- **R-ALS-6** A dangling alias (target directory no longer exists) errors
+  `"alias '<name>' points to a directory that no longer exists: <path>"`; the
+  alias is never auto-deleted.
+- **R-ALS-7** When the alias target equals `--exclude`, the error is
+  `"you are already in the only match"`.
+- **R-ALS-8** Bash/zsh tab-completion for `zz -a|--alias <name> <path>`
+  completes `<path>` using native directory completion (bash: `compgen -A
+  directory`; zsh: `_cd -/`) — the same mechanism as single-argument `z <TAB>`
+  completion — rather than the interactive fzf/frecency flow, since alias
+  targets are plain filesystem paths, not frecency-tracked jump keywords.
+  Does not apply when completing `-d|--delete <name>` (the name is not a
+  path).
+
+### 2.12 `branch` / `worktree` — git-based jumps
+
+- **R-GIT-1** `zjump branch <branch> [repo-keywords...]` prints the worktree
+  path (including the main checkout) where `<branch>` is checked out, matched
+  by exact branch shortname.
+- **R-GIT-2** `zjump worktree <name> [repo-keywords...]` prints a worktree
+  path, matched first by directory basename (exact), then by branch shortname
+  (exact). Ambiguity (>1 match) errors listing candidates.
+- **R-GIT-3** `[repo-keywords]` resolution: when omitted, the current working
+  directory is used (`git rev-parse --show-toplevel`); when given, they are
+  matched against the frecency database (best-match, must exist), and that path
+  must be inside a git repository.
+- **R-GIT-4** When no matching worktree is found, `branch` errors
+  `"branch not checked out in any worktree: <branch>"` with a hint of available
+  branches; `worktree` errors `"no worktree found: <name>"` with available
+  worktrees. Both subcommands are read-only — they never create worktrees.
+- **R-GIT-5** git not installed → `"could not find git, is it installed?"`;
+  not a git repo → `"not a git repository: <path>"`.
+- **R-GIT-6** The shell dispatch (`z -b|--branch` / `z -w|--worktree`) lives in
+  the generated `__zjump_z` function, interleaved after the standard `--`/`-d`
+  checks and before the frecency-query fallback, so every init-generated jump
+  command (under any `--cmd` prefix) supports these flags.
+- **R-GIT-7** When `<branch>` is omitted (`zz -b` with no argument), an fzf
+  interactive picker is displayed listing all checked-out branches in the
+  current repo. Selecting one jumps to its worktree. If there is exactly one
+  candidate, it is selected automatically (no fzf needed). If CWD is not inside
+  a git repository, the top 10 worktree directories from the frecency database
+  are listed instead, labeled by their current branch.
+- **R-GIT-8** When `<name>` is omitted (`zz -w` with no argument), an fzf
+  interactive picker is displayed listing all worktrees in the current repo
+  (format: `basename (branch)`). Selecting one jumps to it. Same single-offer
+  fast path and out-of-repo DB-fallback as R-GIT-7.
+- **R-GIT-9** *(extension)* `zjump worktree --all` (`zz -W` / `zz --worktree-all`)
+  lists worktrees across **every** repository known to the frecency database,
+  ignoring the current directory (works from inside a repo). Repos are
+  deduplicated by canonical main-checkout path; each fzf label carries a
+  `[repo: <basename>]` suffix so same-named worktrees across repos stay
+  distinguishable. `[repo-keywords]` narrow the scan when given.
+- **R-GIT-10** *(extension)* Every `worktree`/`branch` lookup — named or picker,
+  with or without repo-keywords — **seeds** the resolved repository's worktrees
+  into the frecency database exactly once each (rank `1.0`, only when absent),
+  so a first `zz -w`/`zz -b` makes all of a repo's worktree/branch directories
+  jumpable by plain `zz <keyword>` afterward. Seeding is best-effort (a failed
+  DB open or git error only skips indexing, never fails the lookup).
+- **R-GIT-11** *(extension)* `zjump worktree --all` seeds every discovered
+  worktree path into the database on first use (same seed-once semantics as
+  R-GIT-10), so a first `zz -W` both lists and indexes all known worktrees.
+
+### 2.13 `list` — combined directory/alias/branch/worktree overview
+
+`zjump list` is a zjump-only extension subcommand with **no zoxide equivalent**
+— zoxide's closest behavior is `zoxide query --list` (a flag, not a subcommand),
+and the git sections have no analog at all. Recorded as `R-LIST-*` here and
+mirrored in the README's `zjump list` section (DESIGN.md documents upstream
+parity only, so extensions live in the README, not DESIGN.md).
+
+- **R-LIST-1** Bare `zjump list` ≈ `zjump query --list`: prints a single
+  DIRECTORIES section, best-first, with PATH column. The ALIASES, BRANCHES,
+  and WORKTREES sections are **absent** in default mode.
+- **R-LIST-2** Section toggles are additive: `--aliases`, `--branches`,
+  `--worktrees` opt in the corresponding sections; `--no-dirs` suppresses
+  DIRECTORIES. Empty requested sections print their header plus a single
+  `(none)` row so users can distinguish "asked for, none configured" from a
+  suppressed section. Unrequested sections are omitted entirely.
+- **R-LIST-3** `-s, --score` adds a SCORE column to DIRECTORIES, formatted
+  `%6.1f` after clamping the frecency score to `[0.0, 9999.0]` — identical to
+  `query --score` (`Dir.DisplayScore`, R-MATCH-4).
+- **R-LIST-4** `-a, --all` keeps zoxide semper on DIRECTORIES: disables the
+  filesystem-existence filter and the lazy-deletion TTL pass (R-QRY-6 /
+  R-QRY-10). Lazy deletion of excluded entries (`_ZJUMP_EXCLUDE_DIRS` glob
+  matches) is unchanged.
+- **R-LIST-5** Repo scope for BRANCHES/WORKTREES: when no keywords are
+  passed, defaults to `git.RepoRoot($PWD)` (R-GIT-3); keywords override
+  via `db.Stream` top match. If CWD isn't a repo and no keywords are given,
+  the git sections print their header + `(none)` without erroring.
+- **R-LIST-6** `--all-repos` switches the BRANCHES/WORKTREES sections to
+  scan every DB entry containing a `.git` and enumerate worktrees across all
+  distinct repos. A REPO leading column is added in this mode, deduplicated
+  by the canonical main-checkout path returned by `git worktree list
+  --porcelain`. `directories` is still filtered by positionals; `--all-repos`
+  combined with positionals restricts the candidate set, it does not error.
+- **R-LIST-7** `--json` switches output to a structured JSON object:
+  `directories` is always present (may be `[]`); `aliases`/`branches`/
+  `worktrees` are present **iff** requested (omitempty); a requested-but-
+  empty section serializes as `[]` (not `null`). All rows carry the same
+  field names as the in-memory types (`path`, `rank`, `last_accessed`,
+  `score`, `name`, `branch`, `basename`, `detached`, `repo`).
+- **R-LIST-8** `list` follows deviation **D-4**: it calls
+  `database.Save()` unconditionally after iteration, but `Save` is a no-op
+  when the iteration did not dirty the DB. Lazy deletions of stale/excluded
+  entries during `db.Stream.Next()` (R-QRY-10) persist as usual; a pure
+  listing with no deletions triggers no DB rewrite.
 
 ---
 
@@ -272,7 +411,7 @@ README:
 The effort is "done" when:
 
 - **A-1** A user can `eval "$(zjump init zsh)"` / `... bash`, navigate normally,
-  and `z <keywords>` lands in the correct highest-frecency directory.
+  and `zz <keywords>` lands in the correct highest-frecency directory.
 - **A-2** The keyword matcher passes a table-driven parity suite mirroring
   zoxide's cases (case-folding, final-component anchoring, overlap rejection).
 - **A-3** Frecency ordering matches zoxide's for a fixed fixture database across

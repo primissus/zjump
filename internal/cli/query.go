@@ -5,12 +5,29 @@ import (
 	"fmt"
 	"os"
 
-	"zjump/internal/config"
-	"zjump/internal/db"
-	"zjump/internal/errs"
-	"zjump/internal/fzf"
-	"zjump/internal/paths"
+	"github.com/primissus/zjump/internal/alias"
+	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/db"
+	"github.com/primissus/zjump/internal/errs"
+	"github.com/primissus/zjump/internal/fzf"
+	"github.com/primissus/zjump/internal/log"
+	"github.com/primissus/zjump/internal/paths"
 )
+
+const queryHelp = `Usage: zjump query [OPTIONS] [keywords...]
+
+Search the frecency database and print the best-matching directory.
+With --list, print all matching directories. With --interactive,
+select via fzf.
+
+Flags:
+    -a, --all             List all matches, including nonexistent paths
+    -i, --interactive     Select a directory interactively via fzf
+    -l, --list            List all matching directories
+    -s, --score           Print the frecency score alongside the path
+    --exclude PATH        Exclude a specific path from results
+    --base-dir DIR        Restrict results to paths under a base directory
+`
 
 // runQuery implements `zjump query`. Per deviation D-4 the DB is rewritten only
 // when the query actually dirtied it (a lazy deletion), unlike zoxide's
@@ -33,6 +50,10 @@ func runQuery(args []string) error {
 
 	keywords, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "query", queryHelp)
+			return nil
+		}
 		return err
 	}
 
@@ -81,6 +102,20 @@ type queryParams struct {
 }
 
 func doQuery(database *db.Database, p queryParams) error {
+	// Alias resolution: in default mode only (not --list/--interactive), if
+	// there is exactly one keyword and it matches an alias (exact match first,
+	// then unique prefix match), resolve it directly. Alias beats frecency but
+	// does not affect --list or --interactive modes (which stay pure frecency).
+	if !p.interactive && !p.list && len(p.keywords) == 1 {
+		if resolved, aErr := resolveAlias(p.keywords[0], p); aErr != nil {
+			return aErr
+		} else if resolved != "" {
+			_, werr := fmt.Fprintln(os.Stdout, resolved)
+			return errs.PipeExit(werr, "stdout")
+		}
+	}
+
+	log.Debugf("query: keywords=%v (interactive=%v list=%v)", p.keywords, p.interactive, p.list)
 	now, err := paths.CurrentTime()
 	if err != nil {
 		return err
@@ -127,11 +162,13 @@ func formatDir(dir *db.Dir, now db.Epoch, score bool) string {
 func queryFirst(stream *db.Stream, now db.Epoch, score bool, excl *string) error {
 	dir := stream.Next()
 	if dir == nil {
+		log.Errorf("no match found")
 		return fmt.Errorf("no match found")
 	}
 	for excl != nil && dir.Path == *excl {
 		dir = stream.Next()
 		if dir == nil {
+			log.Errorf("you are already in the only match")
 			return fmt.Errorf("you are already in the only match")
 		}
 	}
@@ -206,20 +243,38 @@ func queryFzf() (*fzf.Child, error) {
 	if opts, ok := config.FzfOpts(); ok {
 		f.Env("FZF_DEFAULT_OPTS", opts)
 	} else {
-		f.Args(
-			"--exact",
-			"--no-sort",
-			"--bind=ctrl-z:ignore,btab:up,tab:down",
-			"--cycle",
-			"--keep-right",
-			"--border=sharp",
-			"--height=45%",
-			"--info=inline",
-			"--layout=reverse",
-			"--tabstop=1",
-			"--exit-0",
-		)
+		f.StdAppearance()
 		f.EnablePreview()
 	}
 	return f.Spawn()
+}
+
+// resolveAlias checks whether keyword matches a stored alias (exact match
+// first, then unique prefix match). Returns the target path if so, "" if no
+// alias matches, or an error if the alias target is missing on disk or equals
+// --exclude.
+func resolveAlias(keyword string, p queryParams) (string, error) {
+	dataDir, err := config.DataDir()
+	if err != nil {
+		return "", err
+	}
+	store, aErr := alias.Open(dataDir)
+	if aErr != nil {
+		return "", nil // file missing or corrupt: no aliases, fall through
+	}
+	target, ok := store.Match(keyword)
+	if !ok {
+		return "", nil
+	}
+
+	if p.excludeSet && target == p.exclude {
+		return "", fmt.Errorf("you are already in the only match")
+	}
+
+	info, statErr := os.Stat(target)
+	if statErr != nil || !info.IsDir() {
+		return "", fmt.Errorf("alias %q points to a directory that no longer exists: %s", keyword, target)
+	}
+
+	return target, nil
 }

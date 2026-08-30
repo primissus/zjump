@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"zjump/internal/glob"
+	"github.com/primissus/zjump/internal/glob"
 )
 
 func collect(s *Stream) []string {

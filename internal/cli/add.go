@@ -1,14 +1,26 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strings"
 	"unicode/utf8"
 
-	"zjump/internal/config"
-	"zjump/internal/paths"
+	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/git"
+	"github.com/primissus/zjump/internal/log"
+	"github.com/primissus/zjump/internal/paths"
 )
+
+const addHelp = `Usage: zjump add [--score SCORE] <paths>...
+
+Add one or more directories to the frecency database, or increment
+their rank. Paths that match _ZJUMP_EXCLUDE_DIRS are silently skipped.
+
+Flags:
+    -s, --score SCORE    Rank increment (default 1.0)
+`
 
 // runAdd implements `zjump add`. It loads exclude/maxage config and reads the
 // clock BEFORE opening the DB, so a malformed env var or bad clock fails fast
@@ -26,6 +38,10 @@ func runAdd(args []string) error {
 
 	targets, err := parseArgs(fs, args)
 	if err != nil {
+		if err == flag.ErrHelp {
+			printCmdHelp(os.Stdout, "add", addHelp)
+			return nil
+		}
 		return err
 	}
 	if len(targets) == 0 {
@@ -50,6 +66,8 @@ func runAdd(args []string) error {
 		return err
 	}
 	resolveSymlinks := config.ResolveSymlinks()
+	autoIndex := config.AutoIndexDirectory()
+	log.Debugf("add: targets=%v (score=%.1f, autoIndex=%t)", targets, score, autoIndex)
 
 	for _, target := range targets {
 		var resolved string
@@ -62,6 +80,7 @@ func runAdd(args []string) error {
 			return err
 		}
 		if !utf8.ValidString(resolved) {
+			log.Errorf("invalid unicode in path: %s", resolved)
 			return fmt.Errorf("invalid unicode in path: %s", resolved)
 		}
 
@@ -70,10 +89,23 @@ func runAdd(args []string) error {
 			continue
 		}
 		if info, statErr := os.Stat(resolved); statErr != nil || !info.IsDir() {
+			log.Errorf("not a directory: %s", resolved)
 			return fmt.Errorf("not a directory: %s", resolved)
 		}
 
 		database.AddUpdate(resolved, score, now)
+		log.Debugf("add: added %s (score=%.1f)", resolved, score)
+
+		// _ZJUMP_AUTO_INDEX_DIRECTORY=1: seed the worktrees (and branches) of
+		// the repository containing this path, once each, so they become
+		// jumpable by frecency without a prior visit. Best effort — git
+		// errors are swallowed by seedWorktrees.
+		if autoIndex {
+			repoDir, repoErr := git.RepoRoot(resolved)
+			if repoErr == nil {
+				seedWorktrees(database, repoDir, now)
+			}
+		}
 	}
 
 	// Aging runs only if something actually changed (R-ADD-8).

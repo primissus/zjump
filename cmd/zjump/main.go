@@ -10,8 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"zjump/internal/cli"
-	"zjump/internal/errs"
+	"github.com/primissus/zjump/internal/cli"
+	"github.com/primissus/zjump/internal/errs"
 )
 
 func main() {

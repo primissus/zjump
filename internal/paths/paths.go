@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"zjump/internal/db"
+	"github.com/primissus/zjump/internal/db"
 )
 
 // ResolvePath returns the absolute form of p WITHOUT touching the filesystem and
