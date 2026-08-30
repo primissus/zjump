@@ -790,3 +790,84 @@ func TestListBranchesWorktrees(t *testing.T) {
 		t.Errorf("missing main resolved path:\n%s", out)
 	}
 }
+
+// TestWorktreeEndToEnd indexes a real repo with a linked worktree and checks the
+// `query --type worktree` output in default, --list, and -i (fzf field-2) modes
+// (R2-WT-2, §9 Phase 5).
+func TestWorktreeEndToEnd(t *testing.T) {
+	requireBin(t, "git")
+	data := t.TempDir()
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	feature := filepath.Join(root, "wt-feature")
+
+	mustGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Env = append(os.Environ(),
+			"GIT_CONFIG_GLOBAL=/dev/null",
+			"GIT_CONFIG_SYSTEM=/dev/null",
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	os.MkdirAll(repo, 0o755)
+	mustGit("-C", repo, "-c", "init.defaultBranch=main", "init")
+	os.WriteFile(filepath.Join(repo, "README"), []byte("hi\n"), 0o644)
+	mustGit("-C", repo, "add", "README")
+	mustGit("-C", repo, "commit", "-m", "init")
+	mustGit("-C", repo, "worktree", "add", feature, "-b", "feature")
+
+	resolve := func(p string) string {
+		r, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			t.Fatalf("resolve %s: %v", p, err)
+		}
+		return r
+	}
+	canonicalRepo := resolve(repo)
+	canonicalFeature := resolve(feature)
+
+	// Index the repo (auto-typed KindRepo).
+	if r := run(t, data, nil, "add", canonicalRepo); r.code != 0 {
+		t.Fatalf("add repo failed: %s", r.stderr)
+	}
+
+	// --list: both the main and linked worktrees appear.
+	list := run(t, data, nil, "query", "--type", "worktree", "--list").stdout
+	if !strings.Contains(list, canonicalFeature) {
+		t.Errorf("worktree --list missing linked worktree %q:\n%s", canonicalFeature, list)
+	}
+	if n := len(splitLines(list)); n < 2 {
+		t.Errorf("expected >=2 worktrees, got:\n%s", list)
+	}
+
+	// default: prints a single worktree path (best repo's first worktree).
+	first := strings.TrimSpace(run(t, data, nil, "query", "--type", "worktree").stdout)
+	if first == "" {
+		t.Error("default worktree query printed nothing")
+	}
+
+	// -i via fzf filter mode: field-2 (path) extraction from the 3-field record.
+	if _, err := exec.LookPath("fzf"); err == nil {
+		r := run(t, data, []string{"FZF_DEFAULT_OPTS=--filter=" + filepath.Base(canonicalFeature)}, "query", "--type", "worktree", "-i")
+		if got := strings.TrimSpace(r.stdout); got != canonicalFeature {
+			t.Errorf("worktree -i field-2 = %q, want %q (stderr=%q)", got, canonicalFeature, r.stderr)
+		}
+	}
+}
+
+// splitLines splits s into trimmed, non-empty lines.
+func splitLines(s string) []string {
+	var out []string
+	for _, l := range strings.Split(s, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}

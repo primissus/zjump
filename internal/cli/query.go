@@ -146,6 +146,11 @@ func doQuery(database *db.Database, p queryParams) error {
 		return err
 	}
 
+	// --type worktree is a live git enumeration, not a DB query (§6, R2-WT-2).
+	if p.typ == "worktree" {
+		return queryWorktree(database, p, now)
+	}
+
 	excludeGlobs, err := config.ExcludeDirs()
 	if err != nil {
 		return err

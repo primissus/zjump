@@ -35,6 +35,7 @@ type Worktree struct {
 	Head     string
 	Branch   string // short name, e.g. "main"; empty when detached
 	Detached bool
+	Bare     bool // a `bare` line marks the block; bare repos are not jumpable (§6)
 }
 
 // RepoRoot runs `git -C dir rev-parse --show-toplevel` and returns the absolute
@@ -110,7 +111,7 @@ func parseWorktrees(output string) ([]Worktree, error) {
 		case "detached":
 			cur.Detached = true
 		case "bare":
-			// ignore
+			cur.Bare = true
 		default:
 			// ignore unknown keys for forward compatibility
 		}

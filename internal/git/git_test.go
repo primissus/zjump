@@ -131,3 +131,59 @@ func TestParseWorktreesTrailingNewline(t *testing.T) {
 		t.Errorf("Branch = %q", wts[0].Branch)
 	}
 }
+
+// TestPorcelainParser exercises the fixture cases from §6 step 3: a normal
+// branch worktree, a detached one, a bare block (Bare set), and lines that must
+// be ignored (HEAD/locked/prunable), plus multiple blocks (R2-WT-1).
+func TestPorcelainParser(t *testing.T) {
+	fixture := "" +
+		"worktree /home/u/main\n" +
+		"HEAD 1111111111111111111111111111111111111111\n" +
+		"branch refs/heads/main\n" +
+		"\n" +
+		"worktree /home/u/feature\n" +
+		"HEAD 2222222222222222222222222222222222222222\n" +
+		"branch refs/heads/feature\n" +
+		"locked\n" +
+		"\n" +
+		"worktree /home/u/detached\n" +
+		"HEAD 3333333333333333333333333333333333333333\n" +
+		"detached\n" +
+		"\n" +
+		"worktree /home/u/bare-repo\n" +
+		"bare\n" +
+		"\n" +
+		"worktree /home/u/prunable\n" +
+		"HEAD 4444444444444444444444444444444444444444\n" +
+		"branch refs/heads/gone\n" +
+		"prunable gitdir file points to non-existent location\n"
+
+	wts, err := parseWorktrees(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wts) != 5 {
+		t.Fatalf("parsed %d worktrees, want 5: %+v", len(wts), wts)
+	}
+
+	// main: normal branch.
+	if wts[0].Path != "/home/u/main" || wts[0].Branch != "main" || wts[0].Detached || wts[0].Bare {
+		t.Errorf("main = %+v, want path /home/u/main branch main", wts[0])
+	}
+	// feature: locked line ignored.
+	if wts[1].Path != "/home/u/feature" || wts[1].Branch != "feature" {
+		t.Errorf("feature = %+v, want branch feature (locked ignored)", wts[1])
+	}
+	// detached.
+	if !wts[2].Detached || wts[2].Path != "/home/u/detached" {
+		t.Errorf("detached = %+v, want detached /home/u/detached", wts[2])
+	}
+	// bare: Bare flag set (skipped later at enumeration time).
+	if !wts[3].Bare || wts[3].Path != "/home/u/bare-repo" {
+		t.Errorf("bare = %+v, want Bare /home/u/bare-repo", wts[3])
+	}
+	// prunable line ignored.
+	if wts[4].Path != "/home/u/prunable" || wts[4].Branch != "gone" {
+		t.Errorf("prunable = %+v, want branch gone (prunable ignored)", wts[4])
+	}
+}
