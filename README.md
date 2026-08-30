@@ -224,7 +224,7 @@ Core `zz` jumping works without it.
 
 ## Commands
 
-The `zjump` binary exposes ten subcommands. In everyday use you'll rarely call
+The `zjump` binary exposes eleven subcommands. In everyday use you'll rarely call
 them directly — the `zz`/`zzi` shell functions and the tracking hook do it for you
 — but the full surface is documented here.
 
@@ -263,12 +263,35 @@ invoke under the hood.
 | `-i`, `--interactive` | Select a match interactively via fzf. Conflicts with `--list`. |
 | `-s`, `--score` | Prefix each result with its decayed frecency score. |
 | `-a`, `--all` | Include directories that no longer exist (disables the existence filter). |
+| `--type <type>` | Restrict to one entry kind: `dir`, `repo`, `worktree`, `alias`, or `any` (default: `dir`+`repo`). A zjump-only extension — see [Typed entries](#typed-entries). |
 | `--exclude <path>` | Skip this exact path in the results (never deletes it; used by `zz` to exclude `$PWD`). |
 | `--base-dir <path>` | Only return matches that are component-wise under this directory. |
 
 - Default mode prints the single best match, or errors `no match found`.
 - `zjump query --list | head` and other pipelines exit cleanly (silent, code 0)
   on a broken pipe.
+- With `--type`, `dir`/`repo` match on the path; `alias` matches on the alias
+  **name** and prints the target path; `worktree` performs a live enumeration of
+  indexed repositories; `any` spans DB entries (by path) plus aliases (by name).
+
+### `zjump index <roots>...`
+
+Bulk-scan one or more directories for git repositories and add each as a typed
+repository entry — a zjump-only extension with no zoxide equivalent.
+
+| Flag | Description |
+| --- | --- |
+| `<roots>...` | One or more root directories to scan (required). |
+| `--max-depth <N>` | Maximum depth to descend below each root (root is depth 0; default `3`). |
+| `-s`, `--score <N>` | Rank to add for each indexed repository (float, default `1.0`). |
+
+- Walks each root top-down, recording any directory whose `.git` is a real
+  directory or file, and **does not descend into** detected repositories.
+- Hidden directories (name starts with `.`), symlinks, and unreadable
+  directories are skipped silently; `_ZJUMP_RESOLVE_SYMLINKS` and
+  `_ZJUMP_EXCLUDE_DIRS` are honored, as is `_ZJUMP_MAXAGE` for the single aging
+  pass. A summary `indexed {N} repositories under {M} roots` is printed to
+  stderr.
 
 ### `zjump remove [paths]...`
 
@@ -560,6 +583,23 @@ directory is gone is hidden, and permanently removed once it's also stale
 (not accessed in ~90 days) — so an unmounted drive is hidden but kept, while a
 truly-deleted directory eventually disappears. `--all` disables this.
 
+### Typed entries
+
+On top of plain directories, zjump tracks **repository roots** as a distinct
+entry kind. When `add` (or `index`) sees a path whose `.git` is a real directory
+or file, it types the entry as a repository (upgrading in place, never
+downgrading) — so `zjump query --type repo` and `zjump query --type worktree`
+have a source of truth. Worktrees themselves are **never stored**: `--type
+worktree` enumerates them live from the top-ranked repositories via
+`git worktree list --porcelain` (bounded to the first 50 repos), so no git
+subprocess runs unless that type is requested. `--type alias` reads the separate
+alias store. Typed entries are a zjump-only extension (see **D-6**).
+
+The on-disk format gained a per-entry `kind` field (format **v2**). Existing
+version-1 databases still load and are upgraded in place to v2 the first time
+the database is actually written; loading alone never rewrites the file (D-4).
+The upgrade is one-way — there is no v2 → v1 downgrade.
+
 ## Deliberate deviations from zoxide
 
 zjump targets broad behavioral parity, not bug-for-bug parity. The intentional
@@ -575,6 +615,10 @@ differences:
 - **D-4** — `query` rewrites the database **only when it actually changed** (a
   lazy deletion), rather than on every invocation.
 - **D-5** — no Windows `cygpath` handling; zjump is Unix-only.
+- **D-6** — typed entries (directory vs. repository roots), the `--type` query
+  filter, the `zjump index` bulk scanner, and live worktree enumeration. These
+  capabilities have no zoxide analog and are additive and opt-in — the default
+  `query`/`add` behavior is unchanged.
 
 Also out of scope: the `import` subcommand, shells other than bash/zsh, and
 edit-distance matching.

@@ -12,8 +12,10 @@
   indexing (2026-08-05): `worktree --all`/`zz -W`, `_ZJUMP_AUTO_INDEX_DIRECTORY`,
   and `-w`/`-b` seeding). `zjump update` (2026-08-06) self-updates the binary
   from GitHub Releases by downloading the matching goreleaser archive,
-  verifying its SHA256, and atomically replacing the running binary. Source
-  lives under
+  verifying its SHA256, and atomically replacing the running binary. The
+  typed-entries port (2026-08-29) adds typed DB entries (dir/repo kinds, format
+  v2 with one-way v1 upgrade), `query --type dir|repo|worktree|alias|any`,
+  and `zjump index` — spec in [`PLAN-GIT.md`](./PLAN-GIT.md). Source lives under
   `cmd/zjump` and `internal/*`;
   `go test ./...` is the dependency-free suite and
   `go test -tags shelltests ./...` adds the real bash/zsh/fzf/git integration
@@ -35,7 +37,7 @@
   that scope: the out-of-scope items (N-1..N-6 — `import`, non-bash/zsh shells,
   `db.zo` byte-compat, Windows, Levenshtein) remain out unless the user
   explicitly re-scopes them.
-- The five deliberate deviations from zoxide (D-1..D-5) are intentional; keep
+- The six deliberate deviations from zoxide (D-1..D-6) are intentional; keep
   them, and keep every one carrying its `D-n` ID in a code comment and README note.
 
 ## Conventions
