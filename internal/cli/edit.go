@@ -64,12 +64,12 @@ func runEdit(args []string) error {
 		if len(rest) < 2 {
 			return fmt.Errorf("edit increment: a path argument is required")
 		}
-		database.Add(rest[1], 1.0, now)
+		database.Add(rest[1], 1.0, now, db.KindDir)
 	case "decrement":
 		if len(rest) < 2 {
 			return fmt.Errorf("edit decrement: a path argument is required")
 		}
-		database.Add(rest[1], -1.0, now)
+		database.Add(rest[1], -1.0, now, db.KindDir)
 	case "delete":
 		if len(rest) < 2 {
 			return fmt.Errorf("edit delete: a path argument is required")

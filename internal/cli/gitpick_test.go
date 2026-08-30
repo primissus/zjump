@@ -255,15 +255,15 @@ func TestSeedWorktrees_OnceOnly(t *testing.T) {
 	canonicalRepo, _ := filepath.EvalSymlinks(repoDir)
 	canonicalWT, _ := filepath.EvalSymlinks(wt2)
 
-	db := mustOpenTestDB(t)
-	defer db.Save()
+	database := mustOpenTestDB(t)
+	defer database.Save()
 	const now uint64 = 1000
-	db.AddUpdate(canonicalRepo, 1.0, now)
+	database.AddUpdate(canonicalRepo, 1.0, now, db.KindDir)
 
 	// First seed: both worktrees are missing; both should be inserted at 1.0.
-	seedWorktrees(db, canonicalRepo, now)
+	seedWorktrees(database, canonicalRepo, now)
 	rankOf := func(p string) float64 {
-		for _, d := range db.Dirs() {
+		for _, d := range database.Dirs() {
 			if d.Path == p {
 				return d.Rank
 			}
@@ -278,7 +278,7 @@ func TestSeedWorktrees_OnceOnly(t *testing.T) {
 	}
 
 	// Second seed: both already present; ranks must not change.
-	seedWorktrees(db, canonicalRepo, now)
+	seedWorktrees(database, canonicalRepo, now)
 	if r := rankOf(canonicalRepo); r != 1.0 {
 		t.Errorf("main rank after second seed = %v, want 1.0 (unchanged)", r)
 	}
@@ -314,15 +314,15 @@ func TestCollectAllReposWorktrees_Dedup(t *testing.T) {
 	canonicalRepo, _ := filepath.EvalSymlinks(repoDir)
 	canonicalWT, _ := filepath.EvalSymlinks(wt2)
 
-	db := mustOpenTestDB(t)
-	defer db.Save()
+	database := mustOpenTestDB(t)
+	defer database.Save()
 	const now uint64 = 1000
 	// Track BOTH the main checkout and the feature worktree as DB dirs, so the
 	// dedup-by-canonical-main-checkout logic must collapse them to one repo.
-	db.AddUpdate(canonicalRepo, 1.0, now)
-	db.AddUpdate(canonicalWT, 1.0, now)
+	database.AddUpdate(canonicalRepo, 1.0, now, db.KindDir)
+	database.AddUpdate(canonicalWT, 1.0, now, db.KindDir)
 
-	entries, err := collectAllReposWorktrees(db, now, nil)
+	entries, err := collectAllReposWorktrees(database, now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

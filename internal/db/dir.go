@@ -11,6 +11,18 @@ type Rank = float64
 // Epoch is a Unix timestamp in whole seconds.
 type Epoch = uint64
 
+// Kind tags each entry as a plain directory or a git repository root (PLAN-GIT.md
+// §2, D-6). KindAlias is recognized by the decoder for forward compatibility but
+// is never written on this port (A-1, A-5). Worktrees are never stored — they are
+// derived live at query time — so there is deliberately no KindWorktree.
+type Kind uint8
+
+const (
+	KindDir   Kind = 0 // plain directory (existing behavior; the default)
+	KindRepo  Kind = 1 // root of a git repository (has .git)
+	KindAlias Kind = 2 // user-named shortcut; recognized on decode, never written
+)
+
 // Time-bucket constants (seconds). MONTH is used only by the query TTL, never by
 // score(). Mirrors zoxide's util.rs constants (ARCHITECTURE.md §4).
 const (
@@ -31,7 +43,13 @@ type Dir struct {
 	Path         string
 	Rank         Rank
 	LastAccessed Epoch
+	Kind         Kind
+	Name         string // non-empty only for KindAlias (the alias name)
 }
+
+// IsAlias reports whether d is a user-named alias entry (decoded from a
+// future-format file; never produced by this port — A-5).
+func (d *Dir) IsAlias() bool { return d.Kind == KindAlias }
 
 // Score computes the decayed frecency score: rank multiplied by a recency
 // weight. Uses saturating subtraction so a future-dated last_accessed (clock

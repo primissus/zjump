@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/primissus/zjump/internal/db"
 	"github.com/primissus/zjump/internal/errs"
 	"github.com/primissus/zjump/internal/git"
 	"github.com/primissus/zjump/internal/log"
@@ -184,7 +185,7 @@ func runWorktreePickAll(keywords []string) error {
 	}
 	for _, e := range entries {
 		if !database.Contains(e.path) {
-			database.Add(e.path, 1.0, now)
+			database.Add(e.path, 1.0, now, db.KindDir)
 		}
 	}
 	if len(entries) == 0 {

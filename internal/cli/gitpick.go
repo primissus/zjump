@@ -124,7 +124,7 @@ func seedWorktrees(database *db.Database, repoDir string, now db.Epoch) {
 			continue
 		}
 		if !database.Contains(wt.Path) {
-			database.Add(wt.Path, 1.0, now)
+			database.Add(wt.Path, 1.0, now, db.KindDir)
 		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/primissus/zjump/internal/config"
+	"github.com/primissus/zjump/internal/db"
 	"github.com/primissus/zjump/internal/git"
 	"github.com/primissus/zjump/internal/log"
 	"github.com/primissus/zjump/internal/paths"
@@ -93,7 +94,7 @@ func runAdd(args []string) error {
 			return fmt.Errorf("not a directory: %s", resolved)
 		}
 
-		database.AddUpdate(resolved, score, now)
+		database.AddUpdate(resolved, score, now, db.KindDir)
 		log.Debugf("add: added %s (score=%.1f)", resolved, score)
 
 		// _ZJUMP_AUTO_INDEX_DIRECTORY=1: seed the worktrees (and branches) of
