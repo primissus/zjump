@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/primissus/zjump/internal/alias"
 	"github.com/primissus/zjump/internal/config"
@@ -25,6 +26,8 @@ Flags:
     -i, --interactive     Select a directory interactively via fzf
     -l, --list            List all matching directories
     -s, --score           Print the frecency score alongside the path
+    --type TYPE           Entry type: dir, repo, worktree, alias, or any
+                          (default: dir + repo). zjump extension.
     --exclude PATH        Exclude a specific path from results
     --base-dir DIR        Restrict results to paths under a base directory
 `
@@ -44,9 +47,12 @@ func runQuery(args []string) error {
 	fs.BoolVar(&list, "list", false, "")
 	fs.BoolVar(&score, "s", false, "")
 	fs.BoolVar(&score, "score", false, "")
-	var exclude, baseDir string
+	var exclude, baseDir, typ string
 	fs.StringVar(&exclude, "exclude", "", "")
 	fs.StringVar(&baseDir, "base-dir", "", "")
+	// --type selects the candidate set (D-6): dir|repo|worktree|alias|any, or
+	// (omitted) for the default dir+repo behavior plus the alias fast path (§5.1).
+	fs.StringVar(&typ, "type", "", "")
 
 	keywords, err := parseArgs(fs, args)
 	if err != nil {
@@ -62,6 +68,9 @@ func runQuery(args []string) error {
 
 	if interactive && list {
 		return fmt.Errorf("the argument '--interactive' cannot be used with '--list'")
+	}
+	if err := validateType(typ); err != nil {
+		return err
 	}
 
 	database, err := openDB()
@@ -79,6 +88,7 @@ func runQuery(args []string) error {
 		excludeSet:  set["exclude"],
 		baseDir:     baseDir,
 		baseDirSet:  set["base-dir"],
+		typ:         typ,
 	}
 
 	qErr := doQuery(database, p)
@@ -99,14 +109,57 @@ type queryParams struct {
 	excludeSet  bool
 	baseDir     string
 	baseDirSet  bool
+	typ         string // "", "dir", "repo", "worktree", "alias", "any"
+}
+
+// validateType rejects an unknown --type value (§5.1, R2-TYPE-1).
+func validateType(typ string) error {
+	switch typ {
+	case "", "dir", "repo", "worktree", "alias", "any":
+		return nil
+	default:
+		return fmt.Errorf("invalid type: %s", typ)
+	}
+}
+
+// kindsForType maps a --type value to the DB kinds it selects. Aliases are not a
+// stored kind on this port (A-1) and worktrees are enumerated live (§6), so both
+// select no DB kinds here.
+func kindsForType(typ string) []db.Kind {
+	switch typ {
+	case "dir":
+		return []db.Kind{db.KindDir}
+	case "repo":
+		return []db.Kind{db.KindRepo}
+	case "alias", "worktree":
+		return nil
+	case "any":
+		return []db.Kind{db.KindDir, db.KindRepo}
+	default: // "" => today's default candidate set (G-5)
+		return []db.Kind{db.KindDir, db.KindRepo}
+	}
 }
 
 func doQuery(database *db.Database, p queryParams) error {
-	// Alias resolution: in default mode only (not --list/--interactive), if
-	// there is exactly one keyword and it matches an alias (exact match first,
-	// then unique prefix match), resolve it directly. Alias beats frecency but
-	// does not affect --list or --interactive modes (which stay pure frecency).
-	if !p.interactive && !p.list && len(p.keywords) == 1 {
+	now, err := paths.CurrentTime()
+	if err != nil {
+		return err
+	}
+
+	excludeGlobs, err := config.ExcludeDirs()
+	if err != nil {
+		return err
+	}
+
+	var excl *string
+	if p.excludeSet {
+		excl = &p.exclude
+	}
+
+	// Alias fast path: default mode only (no --type, not -l/-i) with exactly one
+	// keyword. A hit prints the target and returns; otherwise we fall through to
+	// the normal dir+repo match stream (feat's resolveAlias, untouched — A-1).
+	if p.typ == "" && !p.interactive && !p.list && len(p.keywords) == 1 {
 		if resolved, aErr := resolveAlias(p.keywords[0], p); aErr != nil {
 			return aErr
 		} else if resolved != "" {
@@ -115,19 +168,17 @@ func doQuery(database *db.Database, p queryParams) error {
 		}
 	}
 
-	log.Debugf("query: keywords=%v (interactive=%v list=%v)", p.keywords, p.interactive, p.list)
-	now, err := paths.CurrentTime()
-	if err != nil {
-		return err
+	// --type alias resolves against the alias store, matched by name (A-1).
+	if p.typ == "alias" {
+		return queryAliasType(p, excl)
 	}
-	excludeGlobs, err := config.ExcludeDirs()
-	if err != nil {
-		return err
-	}
+
+	log.Debugf("query: keywords=%v (interactive=%v list=%v type=%s)", p.keywords, p.interactive, p.list, p.typ)
 
 	opts := db.NewStreamOptions(now).
 		WithKeywords(p.keywords).
-		WithExclude(excludeGlobs)
+		WithExclude(excludeGlobs).
+		WithKinds(kindsForType(p.typ)...)
 	if p.baseDirSet {
 		opts = opts.WithBaseDir(&p.baseDir)
 	}
@@ -137,9 +188,9 @@ func doQuery(database *db.Database, p queryParams) error {
 
 	stream := db.NewStream(database, opts)
 
-	var excl *string
-	if p.excludeSet {
-		excl = &p.exclude
+	// --type any: DB dir+repo (by path) plus store aliases (by name).
+	if p.typ == "any" {
+		return queryAny(stream, p, now, excl)
 	}
 
 	switch {
@@ -150,6 +201,181 @@ func doQuery(database *db.Database, p queryParams) error {
 	default:
 		return queryFirst(stream, now, p.score, excl)
 	}
+}
+
+// storeAliasTargets returns the target paths (name-sorted) of store aliases whose
+// name matches the keywords. --base-dir filters on the target path (A-1). A
+// missing/corrupt store yields no targets, matching resolveAlias's fall-through.
+func storeAliasTargets(p queryParams) []string {
+	dataDir, err := config.DataDir()
+	if err != nil {
+		return nil
+	}
+	store, err := alias.Open(dataDir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range store.Entries() {
+		if !db.MatchPath(p.keywords, e.Name) {
+			continue
+		}
+		if p.baseDirSet && !hasPathPrefix(e.Path, p.baseDir) {
+			continue
+		}
+		out = append(out, e.Path)
+	}
+	return out
+}
+
+// queryAliasType implements `query --type alias`: match store aliases by name,
+// output the target path, --exclude on the target path, -s a no-op (§5.1, A-1).
+func queryAliasType(p queryParams, excl *string) error {
+	targets := storeAliasTargets(p)
+	filtered := withoutExcluded(targets, excl)
+
+	switch {
+	case p.interactive:
+		return pathOnlyInteractive(filtered)
+	case p.list:
+		for _, t := range filtered {
+			if _, werr := fmt.Fprintln(os.Stdout, t); werr != nil {
+				return errs.PipeExit(werr, "stdout")
+			}
+		}
+		return nil
+	default:
+		if len(filtered) == 0 {
+			if len(targets) > 0 {
+				return fmt.Errorf("you are already in the only match")
+			}
+			return fmt.Errorf("no match found")
+		}
+		_, werr := fmt.Fprintln(os.Stdout, filtered[0])
+		return errs.PipeExit(werr, "stdout")
+	}
+}
+
+// queryAny implements `query --type any`: DB dir+repo (matched by path, best
+// first) plus store aliases (matched by name, appended). No git subprocesses.
+func queryAny(stream *db.Stream, p queryParams, now db.Epoch, excl *string) error {
+	aliases := withoutExcluded(storeAliasTargets(p), excl)
+
+	switch {
+	case p.interactive:
+		var paths []string
+		for {
+			dir := stream.Next()
+			if dir == nil {
+				break
+			}
+			if excl != nil && dir.Path == *excl {
+				continue
+			}
+			paths = append(paths, dir.Path)
+		}
+		paths = append(paths, aliases...)
+		return pathOnlyInteractive(paths)
+	case p.list:
+		if err := queryList(stream, now, p.score, excl); err != nil {
+			return err
+		}
+		for _, t := range aliases {
+			if _, werr := fmt.Fprintln(os.Stdout, t); werr != nil {
+				return errs.PipeExit(werr, "stdout")
+			}
+		}
+		return nil
+	default:
+		dir := stream.Next()
+		for excl != nil && dir != nil && dir.Path == *excl {
+			dir = stream.Next()
+		}
+		if dir != nil {
+			_, werr := fmt.Fprintln(os.Stdout, formatDir(dir, now, p.score))
+			return errs.PipeExit(werr, "stdout")
+		}
+		if len(aliases) == 0 {
+			return fmt.Errorf("no match found")
+		}
+		_, werr := fmt.Fprintln(os.Stdout, aliases[0])
+		return errs.PipeExit(werr, "stdout")
+	}
+}
+
+// withoutExcluded drops paths that equal the --exclude value (string compare,
+// verbatim — same as existing --exclude semantics).
+func withoutExcluded(paths []string, excl *string) []string {
+	if excl == nil {
+		return paths
+	}
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if p != *excl {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// pathOnlyInteractive spawns fzf over a path-only (no score) candidate list and
+// prints the selection. Used by --type alias/any, whose aliases have no frecency
+// and therefore no score column.
+func pathOnlyInteractive(paths []string) error {
+	f, err := fzf.New()
+	if err != nil {
+		return err
+	}
+	if opts, ok := config.FzfOpts(); ok {
+		f.Env("FZF_DEFAULT_OPTS", opts)
+	} else {
+		f.StdAppearance()
+	}
+	f.WithNth(1)
+
+	child, err := f.Spawn()
+	if err != nil {
+		return err
+	}
+
+	var selection string
+	for _, p := range paths {
+		sel, werr := child.Write(p)
+		if werr != nil {
+			return werr
+		}
+		if sel != nil {
+			selection = *sel
+			break
+		}
+	}
+	if selection == "" {
+		sel, werr := child.Wait()
+		if werr != nil {
+			return werr
+		}
+		selection = sel
+	}
+	_, werr := fmt.Fprintln(os.Stdout, strings.TrimSpace(selection))
+	return errs.PipeExit(werr, "stdout")
+}
+
+// hasPathPrefix reports whether path is component-wise under base (so "/foo"
+// does not match "/foobar"), mirroring db.pathHasPrefix for the alias-store
+// base-dir filter.
+func hasPathPrefix(path, base string) bool {
+	if path == base {
+		return true
+	}
+	if len(path) > len(base) && strings.HasPrefix(path, base) {
+		// Ensure a component boundary: base "/foo" matches "/foo/bar" but not
+		// "/foobar".
+		rest := path[len(base):]
+		if len(base) == 0 || rest[0] == '/' {
+			return true
+		}
+	}
+	return false
 }
 
 func formatDir(dir *db.Dir, now db.Epoch, score bool) string {
