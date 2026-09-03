@@ -62,5 +62,12 @@
   to cross-compile and publish GitHub Release assets.
 - goreleaser reads the version from the git tag, not from the Go constant.
   Keep both in sync. See `.goreleaser.yml` for the build matrix.
+- The release workflow also publishes to the Homebrew tap
+  [`primissus/homebrew-tap`](https://github.com/primissus/homebrew-tap)
+  (`brew tap primissus/tap && brew install zjump`): goreleaser's
+  `homebrew_casks` block regenerates `Casks/zjump.rb` (version + SHA256s)
+  and commits it with the `HOMEBREW_TAP_GITHUB_TOKEN` secret. The cask file
+  is auto-generated — never hand-edit it; verify the tap commit landed
+  after tagging, and re-run the workflow (re-tag won't work) if it didn't.
 - `go install github.com/primissus/zjump/cmd/zjump@latest` always works;
   pre-built tarballs are available on the GitHub Releases page.
