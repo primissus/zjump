@@ -380,7 +380,9 @@ distinguishable. Optional `[repo-keywords]` narrow the scan to repositories
 matching the frecency query (best match wins, mirroring `branch`). Wired to
 the shell as `zz -W` / `zz --worktree-all`. Also a zjump-only extension (no
 zoxide analog). Like the per-repo lookups, it seeds every discovered worktree
-path into the frecency database on first use.
+path into the frecency database on first use. The scan is bounded to 50
+repositories (shared cap with `query --type worktree` and `list --all-repos`)
+to keep git subprocesses in check on large databases.
 
 ### `zjump list [keywords]...`
 
@@ -398,7 +400,7 @@ with **no zoxide equivalent** — zoxide's closest behavior is `zoxide query
 | `--branches` | Add a BRANCHES section. Repo defaults to `git.RepoRoot($PWD)`; keywords override. Detached worktrees are excluded. |
 | `--worktrees` | Add a WORKTREES section. Same repo resolution as `--branches`. Includes detached worktrees (labelled `(detached)`). |
 | `--no-dirs` | Suppress the DIRECTORIES section. Combine with `--aliases`/`--branches`/`--worktrees` to print only those. |
-| `--all-repos` | Scan every DB entry containing a `.git` and enumerate worktrees across all distinct repos. Adds a REPO leading column to the BRANCHES/WORKTREES sections; deduplicates by canonical main-checkout path. |
+| `--all-repos` | Scan every DB entry containing a `.git` and enumerate worktrees across all distinct repos (bounded to 50 repos, same cap as `worktree --all` and `query --type worktree`). Adds a REPO leading column to the BRANCHES/WORKTREES sections; deduplicates by canonical main-checkout path. |
 | `--json` | Emit a structured JSON object instead of the pretty text table. `directories` is always present (may be `[]`); the optional sections appear **only when requested**, as `[]` (not `null`) even when empty. |
 
 - Bare `zjump list` ≈ `zjump query --list`: a single DIRECTORIES section,
@@ -431,7 +433,7 @@ zjump-only extension with **no zoxide equivalent**.
 
 - Resolution order: `--version` pins an exact tag; otherwise the latest
   release is used (`--prerelease` widens that to the highest-versioned
-  non-draft release, e.g. a `-rc1`).
+  non-draft release, e.g. a `-rc1`; drafts and unparsable tags are skipped).
 - If already at the newest version (and no `--force`), it prints
   `zjump already up to date (X.Y.Z)` and exits 0 without touching anything.
 - The asset name mirrors the goreleaser archives template
@@ -474,6 +476,9 @@ When calling `zjump init`, the following flags are available:
   - If `PATH` is omitted, logs go to a default location
     (typically `/tmp/zjump-debug.log`).
   - Resolved to an absolute path at init time.
+  - Paths containing shell-unsafe characters (`"`, `'`, backtick, `\`, `$`,
+    or newline) are rejected, since the path is baked verbatim into the
+    eval'd shell script.
 
 ### Environment variables
 

@@ -91,6 +91,34 @@ func TestSetLevel(t *testing.T) {
 	}
 }
 
+func TestSetupLevelReSetup(t *testing.T) {
+	// M6: a second Setup switches to the new path instead of silently
+	// keeping the old one.
+	dir := t.TempDir()
+	p1 := filepath.Join(dir, "one.log")
+	p2 := filepath.Join(dir, "two.log")
+
+	if err := Setup(p1); err != nil {
+		t.Fatal(err)
+	}
+	defer Close()
+	if err := Setup(p2); err != nil {
+		t.Fatal(err)
+	}
+	Debugf("second file")
+
+	if b, _ := os.ReadFile(p1); strings.Contains(string(b), "second file") {
+		t.Errorf("first log file should not receive writes after re-setup")
+	}
+	b, err := os.ReadFile(p2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "second file") {
+		t.Errorf("second log file should receive writes after re-setup, got: %s", b)
+	}
+}
+
 func TestDisabled(t *testing.T) {
 	// No Setup — all functions are no-ops.
 	Debugf("should not panic")

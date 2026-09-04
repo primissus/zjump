@@ -31,8 +31,15 @@ func Setup(path string) error {
 func SetupLevel(path string, lvl Level) error {
 	mu.Lock()
 	defer mu.Unlock()
+	// M6: re-setup is explicit — close the previous file instead of
+	// silently keeping the old path/level while the caller believes the
+	// new one took effect.
 	if level != Disabled {
-		return nil
+		if w != nil {
+			w.Close()
+			w = nil
+		}
+		level = Disabled
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {

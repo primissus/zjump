@@ -3,7 +3,6 @@ package alias
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
 )
 
 // Versioned binary format for the aliases file — same discipline as db/format.go
@@ -119,12 +118,4 @@ func deserialize(data []byte) ([]Alias, error) {
 	}
 
 	return entries, nil
-}
-
-func init() {
-	// Ensure compile-time constant is non-zero.
-	if formatVersion == 0 {
-		panic("formatVersion must be non-zero")
-	}
-	_ = math.MaxFloat64 // keep import
 }

@@ -400,6 +400,32 @@ func TestUpdateHelp(t *testing.T) {
 	}
 }
 
+func TestPickNewestSkipsUnparsableAndDrafts(t *testing.T) {
+	// H2: unparsable tags are skipped, drafts are skipped, newest wins
+	// regardless of input order.
+	releases := []ghRelease{
+		{TagName: "nightly", Draft: false},
+		{TagName: "v0.9.0", Draft: true},
+		{TagName: "v0.8.0", Draft: false},
+		{TagName: "v0.10.0", Draft: false},
+		{TagName: "vx.y", Draft: false},
+	}
+	best, err := pickNewest(releases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if best.TagName != "v0.10.0" {
+		t.Errorf("pickNewest = %q, want v0.10.0", best.TagName)
+	}
+
+	if _, err := pickNewest([]ghRelease{
+		{TagName: "nightly"},
+		{TagName: "v1.0.0", Draft: true},
+	}); err == nil {
+		t.Error("expected error when nothing parsable and published remains")
+	}
+}
+
 func TestCompareVersions(t *testing.T) {
 	cases := []struct {
 		a, b string

@@ -171,7 +171,12 @@ func runWorktreePickAll(keywords []string) error {
 	if err != nil {
 		return err
 	}
-	defer database.Save()
+	// H3: surface persistence failures instead of silently discarding them.
+	defer func() {
+		if err := database.Save(); err != nil {
+			log.Errorf("save failed: %v", err)
+		}
+	}()
 
 	now, err := paths.CurrentTime()
 	if err != nil {

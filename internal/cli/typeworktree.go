@@ -165,7 +165,7 @@ func worktreeInteractive(database *db.Database, p queryParams, now db.Epoch, exc
 		if p.excludeSet && c.path == p.exclude {
 			return false
 		}
-		record := fmt.Sprintf("%6.1f\t%s\t[%s]", clampScore(c.score), c.path, c.branch)
+		record := fmt.Sprintf("%6.1f\t%s\t[%s]", db.ClampScore(c.score), c.path, c.branch)
 		sel, werr := child.Write(record)
 		if werr != nil {
 			fzfErr = werr
@@ -202,7 +202,7 @@ func worktreeInteractive(database *db.Database, p queryParams, now db.Epoch, exc
 // score — §6 step 6).
 func formatWorktree(c *wtCand, score bool) string {
 	if score {
-		return fmt.Sprintf("%6.1f %s", clampScore(c.score), c.path)
+		return fmt.Sprintf("%6.1f %s", db.ClampScore(c.score), c.path)
 	}
 	return c.path
 }

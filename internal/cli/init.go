@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/primissus/zjump/internal/config"
 	"github.com/primissus/zjump/internal/errs"
@@ -96,6 +97,12 @@ func runInit(args []string) error {
 		absPath, err := filepath.Abs(logFile)
 		if err != nil {
 			return fmt.Errorf("init --debug: could not resolve path %q: %w", logFile, err)
+		}
+		// H1: the path is baked verbatim into the eval'd shell template
+		// inside double quotes, so reject shell-unsafe characters rather
+		// than trying to escape them.
+		if strings.ContainsAny(absPath, "\"'`\\$") || strings.Contains(absPath, "\n") {
+			return fmt.Errorf("init --debug: log file path contains a shell-unsafe character")
 		}
 		opts.Debug = true
 		opts.DebugLogFile = absPath

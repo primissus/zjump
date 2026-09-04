@@ -138,7 +138,12 @@ func seedRepoWorktrees(repoDir string) {
 	if err != nil {
 		return
 	}
-	defer database.Save()
+	// H3: surface persistence failures instead of silently discarding them.
+	defer func() {
+		if err := database.Save(); err != nil {
+			log.Errorf("save failed: %v", err)
+		}
+	}()
 	now, err := paths.CurrentTime()
 	if err != nil {
 		return
@@ -151,6 +156,8 @@ func seedRepoWorktrees(repoDir string) {
 // (deduped by canonical main checkout path, mirroring list.go's
 // collectAllReposRows). Each entry's label carries a repo disambiguator so
 // same-named worktrees across repos stay distinguishable in the fzf picker.
+// The enumeration is intentionally bounded to maxWorktreeRepos repositories
+// (shared with query --type worktree) to cap git subprocesses on fat databases.
 func collectAllReposWorktrees(database *db.Database, now db.Epoch, keywords []string) ([]gitEntry, error) {
 	excludeGlobs, err := config.ExcludeDirs()
 	if err != nil {
@@ -165,6 +172,7 @@ func collectAllReposWorktrees(database *db.Database, now db.Epoch, keywords []st
 
 	seen := make(map[string]bool)
 	var entries []gitEntry
+	probed := 0
 	for {
 		dir := stream.Next()
 		if dir == nil {
@@ -173,6 +181,10 @@ func collectAllReposWorktrees(database *db.Database, now db.Epoch, keywords []st
 		if _, statErr := os.Stat(filepath.Join(dir.Path, ".git")); statErr != nil {
 			continue
 		}
+		if probed >= maxWorktreeRepos {
+			break
+		}
+		probed++
 		wts, werr := git.Worktrees(dir.Path)
 		if werr != nil || len(wts) == 0 {
 			continue
@@ -230,12 +242,20 @@ func scanDBForWorktrees(database *db.Database, n int) ([]gitEntry, error) {
 	return entries, nil
 }
 
-func pickFromDBBranch() error {
+// pickFromDB is the shared fallback skeleton for pickFromDBBranch and
+// pickFromDBWorktree (M3): open the DB, scan the top-N entries, and fzf-pick.
+// Only the tail label reformat differs, selected via worktreeLabels.
+func pickFromDB(worktreeLabels bool) error {
 	database, err := openDB()
 	if err != nil {
 		return err
 	}
-	defer database.Save()
+	// H3: surface persistence failures instead of silently discarding them.
+	defer func() {
+		if err := database.Save(); err != nil {
+			log.Errorf("save failed: %v", err)
+		}
+	}()
 
 	n, err := config.PickTop()
 	if err != nil {
@@ -247,35 +267,24 @@ func pickFromDBBranch() error {
 	}
 	if len(entries) == 0 {
 		return fmt.Errorf("no git worktrees found in the tracked directories")
+	}
+	if worktreeLabels {
+		for i, e := range entries {
+			base := filepath.Base(e.path)
+			if e.label != "" && e.label != "HEAD" && e.label != base {
+				entries[i].label = fmt.Sprintf("%s (%s)", base, e.label)
+			} else {
+				entries[i].label = base
+			}
+		}
 	}
 	return gitFzfPickAndPrint(entries)
 }
 
-func pickFromDBWorktree() error {
-	database, err := openDB()
-	if err != nil {
-		return err
-	}
-	defer database.Save()
+func pickFromDBBranch() error {
+	return pickFromDB(false)
+}
 
-	n, err := config.PickTop()
-	if err != nil {
-		return err
-	}
-	entries, err := scanDBForWorktrees(database, n)
-	if err != nil {
-		return err
-	}
-	if len(entries) == 0 {
-		return fmt.Errorf("no git worktrees found in the tracked directories")
-	}
-	for i, e := range entries {
-		base := filepath.Base(e.path)
-		if e.label != "" && e.label != "HEAD" && e.label != base {
-			entries[i].label = fmt.Sprintf("%s (%s)", base, e.label)
-		} else {
-			entries[i].label = base
-		}
-	}
-	return gitFzfPickAndPrint(entries)
+func pickFromDBWorktree() error {
+	return pickFromDB(true)
 }

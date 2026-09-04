@@ -225,7 +225,7 @@ func storeAliasTargets(p queryParams) []string {
 		if !db.MatchPath(p.keywords, e.Name) {
 			continue
 		}
-		if p.baseDirSet && !hasPathPrefix(e.Path, p.baseDir) {
+		if p.baseDirSet && !db.PathHasPrefix(e.Path, p.baseDir) {
 			continue
 		}
 		out = append(out, e.Path)
@@ -363,24 +363,6 @@ func pathOnlyInteractive(paths []string) error {
 	}
 	_, werr := fmt.Fprintln(os.Stdout, strings.TrimSpace(selection))
 	return errs.PipeExit(werr, "stdout")
-}
-
-// hasPathPrefix reports whether path is component-wise under base (so "/foo"
-// does not match "/foobar"), mirroring db.pathHasPrefix for the alias-store
-// base-dir filter.
-func hasPathPrefix(path, base string) bool {
-	if path == base {
-		return true
-	}
-	if len(path) > len(base) && strings.HasPrefix(path, base) {
-		// Ensure a component boundary: base "/foo" matches "/foo/bar" but not
-		// "/foobar".
-		rest := path[len(base):]
-		if len(base) == 0 || rest[0] == '/' {
-			return true
-		}
-	}
-	return false
 }
 
 func formatDir(dir *db.Dir, now db.Epoch, score bool) string {

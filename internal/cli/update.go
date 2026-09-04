@@ -11,10 +11,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -213,7 +213,7 @@ func resolveRelease(version string, prerelease bool) (*ghRelease, error) {
 	case version != "":
 		rel := &ghRelease{}
 		if err := ghGet(fmt.Sprintf("%s/repos/%s/%s/releases/tags/%s",
-			githubAPIBase, updateRepoOwner, updateRepoName, ensureV(version)), rel); err != nil {
+			githubAPIBase, updateRepoOwner, updateRepoName, url.PathEscape(ensureV(version))), rel); err != nil {
 			if errors.Is(err, errReleaseNotFound) {
 				return nil, fmt.Errorf("version %s not found", version)
 			}
@@ -237,21 +237,34 @@ func resolveRelease(version string, prerelease bool) (*ghRelease, error) {
 	}
 }
 
-// pickNewest returns the highest-versioned, non-draft release.
+// pickNewest returns the highest-versioned, non-draft release. Unparsable
+// tags are not comparable and are skipped for selection (H2: a sort with an
+// inconsistent comparator yields an arbitrary order).
 func pickNewest(releases []ghRelease) (*ghRelease, error) {
-	sort.Slice(releases, func(i, j int) bool {
-		c, err := compareVersions(releases[i].TagName, releases[j].TagName)
-		if err != nil {
-			return false
+	best := -1
+	for i := range releases {
+		if releases[i].Draft {
+			continue
 		}
-		return c > 0
-	})
-	for _, rel := range releases {
-		if !rel.Draft {
-			return &rel, nil
+		if _, err := parseSemver(releases[i].TagName); err != nil {
+			continue // unparsable tag: not comparable, skip for selection
+		}
+		if best == -1 {
+			best = i
+			continue
+		}
+		c, err := compareVersions(releases[i].TagName, releases[best].TagName)
+		if err != nil {
+			continue // defensive: best is parsable, so this is unreachable
+		}
+		if c > 0 {
+			best = i
 		}
 	}
-	return nil, errors.New("no published releases found")
+	if best == -1 {
+		return nil, errors.New("no published releases found")
+	}
+	return &releases[best], nil
 }
 
 func findAsset(rel *ghRelease, name string) (*ghAsset, bool) {

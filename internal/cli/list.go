@@ -75,7 +75,12 @@ func runList(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer database.Save()
+	// H3: surface persistence failures instead of silently discarding them.
+	defer func() {
+		if err := database.Save(); err != nil {
+			log.Errorf("save failed: %v", err)
+		}
+	}()
 	log.Debugf("list: keywords=%v all=%v", keywords, all)
 
 	now, err := paths.CurrentTime()
@@ -108,7 +113,7 @@ func runList(args []string) error {
 			Path:         d.Path,
 			Rank:         d.Rank,
 			LastAccessed: d.LastAccessed,
-			Score:        clampScore(d.Score(now)),
+			Score:        db.ClampScore(d.Score(now)),
 		})
 	}
 
@@ -214,18 +219,6 @@ type listReport struct {
 	RepoHint   string
 }
 
-// clampScore mirrors Dir.DisplayScore's clamp (internal/db/dir.go:67) so the
-// DIRECTORIES table and JSON agree about the displayed score.
-func clampScore(s db.Rank) db.Rank {
-	if s < 0.0 {
-		return 0.0
-	}
-	if s > 9999.0 {
-		return 9999.0
-	}
-	return s
-}
-
 // collectAliasEntries opens the alias store under the configured data dir and
 // returns its sorted entries. Errors are swallowed (no aliases file ⇝ none).
 func collectAliasEntries() []listAlias {
@@ -312,13 +305,20 @@ func collectWorktreeRows(repoDir string) []listWorktree {
 // canonical repo id (first worktree's path, which is the main checkout in
 // `git worktree list --porcelain` output) is used as the REPO column and as
 // the dedup key so a multi-worktree repo only contributes one set of rows.
-// Per-dir git errors are swallowed, per the extension spec.
+// Per-dir git errors are swallowed, per the extension spec. The enumeration
+// is intentionally bounded to maxWorktreeRepos repositories (shared with
+// query --type worktree) to cap git subprocesses on fat databases.
 func collectAllReposRows(dirs []listDir, wantBranches, wantWorktrees bool) (branches []listBranch, worktrees []listWorktree) {
 	seen := make(map[string]bool, len(dirs))
+	probed := 0
 	for _, d := range dirs {
 		if _, statErr := os.Stat(filepath.Join(d.Path, ".git")); statErr != nil {
 			continue
 		}
+		if probed >= maxWorktreeRepos {
+			break
+		}
+		probed++
 		wts, werr := git.Worktrees(d.Path)
 		if werr != nil || len(wts) == 0 {
 			continue

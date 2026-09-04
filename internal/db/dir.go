@@ -96,20 +96,15 @@ func clamp(v, lo, hi float64) float64 {
 	return v
 }
 
-// toLower lowercases s, with a fast path for ASCII strings. Mirrors
-// util::to_lowercase.
-func toLower(s string) string {
-	if isASCII(s) {
-		return strings.ToLower(s) // ASCII: byte-length preserving
-	}
-	return strings.ToLower(s)
+// ClampScore clamps a decayed frecency score to [0, 9999] for display, the
+// single shared helper (M3/L3) behind Dir.DisplayScore and the list/worktree
+// printers.
+func ClampScore(s Rank) Rank {
+	return clamp(s, 0.0, 9999.0)
 }
 
-func isASCII(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] >= 0x80 {
-			return false
-		}
-	}
-	return true
+// toLower lowercases s. Mirrors util::to_lowercase (M4: the advertised ASCII
+// fast path was identical on both branches, so it is just strings.ToLower).
+func toLower(s string) string {
+	return strings.ToLower(s)
 }

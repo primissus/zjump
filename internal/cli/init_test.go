@@ -100,3 +100,21 @@ func TestInitDebugBareAfterSubcommand(t *testing.T) {
 		t.Errorf("expected baked debug wrapper, got:\n%s", out)
 	}
 }
+
+func TestInitDebugUnsafePath(t *testing.T) {
+	// H1: the log path is baked verbatim into the eval'd template, so
+	// shell-unsafe characters must be rejected.
+	for _, p := range []string{
+		`/tmp/a"b.log`,
+		"/tmp/a'b.log",
+		"/tmp/a`b.log",
+		`/tmp/a\b.log`,
+		"/tmp/a$b.log",
+		"/tmp/a\nb.log",
+	} {
+		_, err := captureStdout(t, func() error { return runInit([]string{"--debug=" + p, "zsh"}) })
+		if err == nil || !strings.Contains(err.Error(), "shell-unsafe") {
+			t.Errorf("runInit(--debug=%q) err = %v, want shell-unsafe error", p, err)
+		}
+	}
+}

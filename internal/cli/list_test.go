@@ -320,8 +320,8 @@ func TestPrintListJSON_NoDirsStillSerializes(t *testing.T) {
 	containsAll(t, out, `"aliases"`, `"k"`, `"/v"`)
 }
 
-// TestClampScore asserts clampScore matches Dir.DisplayScore's [0, 9999]
-// clamping behavior (internal/db/dir.go:67).
+// TestClampScore asserts db.ClampScore matches Dir.DisplayScore's [0, 9999]
+// clamping behavior (internal/db/dir.go).
 func TestClampScore(t *testing.T) {
 	tests := []struct {
 		in, want db.Rank
@@ -334,8 +334,8 @@ func TestClampScore(t *testing.T) {
 		{1e12, 9999.0},
 	}
 	for _, tc := range tests {
-		if got := clampScore(tc.in); got != tc.want {
-			t.Errorf("clampScore(%v) = %v, want %v", tc.in, got, tc.want)
+		if got := db.ClampScore(tc.in); got != tc.want {
+			t.Errorf("ClampScore(%v) = %v, want %v", tc.in, got, tc.want)
 		}
 	}
 }

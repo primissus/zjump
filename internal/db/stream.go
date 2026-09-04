@@ -161,7 +161,7 @@ func (s *Stream) filterByBaseDir(path string) bool {
 	if s.opts.baseDir == nil {
 		return true
 	}
-	return pathHasPrefix(path, *s.opts.baseDir)
+	return PathHasPrefix(path, *s.opts.baseDir)
 }
 
 func (s *Stream) filterByExclude(path string) bool {
@@ -192,9 +192,11 @@ func (s *Stream) filterByExists(path string) bool {
 	return info.IsDir()
 }
 
-// pathHasPrefix reports whether path is component-wise under base (so "/foo"
+// PathHasPrefix reports whether path is component-wise under base (so "/foo"
 // does not match "/foobar"). Equivalent to Rust's Path::starts_with.
-func pathHasPrefix(path, base string) bool {
+// Exported so the alias-store base-dir filter in cli reuses the same helper
+// instead of duplicating it (M3).
+func PathHasPrefix(path, base string) bool {
 	pc := splitComponents(path)
 	bc := splitComponents(base)
 	if len(bc) > len(pc) {
