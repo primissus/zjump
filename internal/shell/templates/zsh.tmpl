@@ -159,13 +159,65 @@ function {{ .Cmd }}i() {
 if [[ -o zle ]]; then
     __zjump_result=''
 
+    # __zjump_complete_words fills the caller's candidate arrays (which must be
+    # dynamically-scoped locals of __zjump_z_complete) from `zjump complete`
+    # (a zjump-only extension). The match section is always offered so the
+    # first Tab inserts the longest common prefix; the fuzzy (completion) and
+    # frecency (indexed) sections are added only once zsh has already listed
+    # matches — i.e. on the second Tab — so they never affect that prefix.
+    function __zjump_complete_words() {
+        local __zjump_group __zjump_word __zjump_desc
+        local __zjump_old_list="${compstate[old_list]:-}"
+        while IFS=$'\t' read -r __zjump_group __zjump_word __zjump_desc; do
+            case "${__zjump_group}" in
+                match)
+                    __zjump_match_words+=("${__zjump_word}")
+                    __zjump_match_descs+=("${__zjump_desc}")
+                    ;;
+                completion)
+                    [[ "${__zjump_old_list}" == "yes" ]] || continue
+                    __zjump_comp_words+=("${__zjump_word}")
+                    __zjump_comp_descs+=("${__zjump_desc}")
+                    ;;
+                indexed)
+                    [[ "${__zjump_old_list}" == "yes" ]] || continue
+                    __zjump_idx_words+=("${__zjump_word}")
+                    __zjump_idx_descs+=("${__zjump_desc}")
+                    ;;
+            esac
+        done < <(__zjump complete -- "${1}" 2>/dev/null)
+    }
+
     function __zjump_z_complete() {
         # Only show completions when the cursor is at the end of the line.
         # shellcheck disable=SC2154
         [[ "${#words[@]}" -eq "${CURRENT}" ]] || return 0
 
         if [[ "${#words[@]}" -eq 2 ]]; then
-            # Show completions for local directories.
+            # zjump extension: frecency keyword completion. Candidates come from
+            # the current directory, stored aliases, and the frecency database
+            # (current dir first). The first Tab inserts their longest common
+            # prefix; a second Tab lists the grouped DIRECTORY / CLOSEST
+            # COMPLETIONS / INDEXED sections.
+            if [[ -n "${words[2]}" ]]; then
+                local -a __zjump_match_words __zjump_match_descs
+                local -a __zjump_comp_words __zjump_comp_descs
+                local -a __zjump_idx_words __zjump_idx_descs
+                __zjump_complete_words "${words[2]}"
+                if (( ${#__zjump_match_words[@]} + ${#__zjump_comp_words[@]} + ${#__zjump_idx_words[@]} )); then
+                    # On the second Tab, suppress insertion (the fuzzy/indexed
+                    # matches don't share the typed prefix) and just list.
+                    [[ "${compstate[old_list]:-}" == "yes" ]] && compstate[insert]=''
+                    (( ${#__zjump_match_words[@]} )) &&
+                        compadd -Q -J zjump-dirs -X '%BDirectories%b' -d __zjump_match_descs -- "${__zjump_match_words[@]}"
+                    (( ${#__zjump_comp_words[@]} )) &&
+                        compadd -Q -U -J zjump-completions -X '%BClosest completions%b' -d __zjump_comp_descs -- "${__zjump_comp_words[@]}"
+                    (( ${#__zjump_idx_words[@]} )) &&
+                        compadd -Q -U -J zjump-indexed -X '%BIndexed directories%b' -d __zjump_idx_descs -- "${__zjump_idx_words[@]}"
+                    return 0
+                fi
+            fi
+            # No keyword candidates: fall back to native directory completion.
             _cd -/
         # Completing the <path> of `-a`/`--alias <name> <path>`: alias targets
         # are plain filesystem paths, not frecency keywords, so use native

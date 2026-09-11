@@ -871,3 +871,123 @@ func splitLines(s string) []string {
 	}
 	return out
 }
+
+// TestZshKeywordCompletion drives the generated zsh completion against a real
+// zsh with `compadd` mocked out: the first Tab offers the match candidates
+// (current dir + aliases + db), a second Tab (compstate old_list=yes) adds the
+// indexed section, and an unmatched keyword falls back to native `_cd`.
+func TestZshKeywordCompletion(t *testing.T) {
+	requireBin(t, "zsh")
+	data := t.TempDir()
+	root := t.TempDir()
+	for _, name := range []string{"apple", "application", "banana"} {
+		dir := filepath.Join(root, "db", name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		run(t, data, nil, "add", dir)
+	}
+	cwd := filepath.Join(root, "cwd")
+	if err := os.MkdirAll(filepath.Join(cwd, "appstore"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	script := `
+eval "$(zjump init zsh --hook none)"
+cd "` + cwd + `"
+function _cd() { builtin print -r -- "CD:$*"; }
+function compadd() { builtin print -r -- "COMPADD:$*"; }
+typeset -A compstate
+builtin print -- "FIRST"
+words=(zz ap); CURRENT=2
+__zjump_z_complete
+builtin print -- "SECOND"
+compstate[old_list]=yes
+words=(zz ap); CURRENT=2
+__zjump_z_complete
+builtin print -- "FALLBACK"
+compstate[old_list]=''
+words=(zz zzznope); CURRENT=2
+__zjump_z_complete
+`
+	out, code := execInteractiveZsh(t, script, []string{"_ZJUMP_DATA_DIR=" + data})
+	if code != 0 {
+		t.Fatalf("zsh: script failed: %s", out)
+	}
+
+	first := between(out, "FIRST", "SECOND")
+	for _, want := range []string{"appstore", "apple", "application"} {
+		if !strings.Contains(first, want) {
+			t.Errorf("zsh first-tab candidates %q missing %q", first, want)
+		}
+	}
+	second := between(out, "SECOND", "FALLBACK")
+	if !strings.Contains(second, "banana") {
+		t.Errorf("zsh second-tab listing %q missing indexed candidate banana", second)
+	}
+	if !strings.Contains(out, "CD:-/") {
+		t.Errorf("zsh unmatched keyword did not fall back to `_cd -/`: %q", out)
+	}
+}
+
+// TestBashKeywordCompletion is the bash analogue of TestZshKeywordCompletion.
+// COMP_TYPE is empty on the first Tab and "?" on the second (bash's
+// list-ambig-completions signal), which the template uses to add the indexed
+// section.
+func TestBashKeywordCompletion(t *testing.T) {
+	requireBashCompletion(t)
+	data := t.TempDir()
+	root := t.TempDir()
+	for _, name := range []string{"apple", "application", "banana"} {
+		dir := filepath.Join(root, "db", name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		run(t, data, nil, "add", dir)
+	}
+	cwd := filepath.Join(root, "cwd")
+	if err := os.MkdirAll(filepath.Join(cwd, "appstore"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	script := `
+set -o emacs
+eval "$(zjump init bash --hook none)"
+cd "` + cwd + `"
+COMP_WORDS=(zz ap); COMP_CWORD=1; COMP_TYPE=""
+__zjump_z_complete
+printf 'FIRST:%s\n' "${COMPREPLY[@]}"
+COMP_WORDS=(zz ap); COMP_CWORD=1; COMP_TYPE="?"
+__zjump_z_complete
+printf 'SECOND:%s\n' "${COMPREPLY[@]}"
+`
+	out, code := execScript(t, "bash", script, []string{"_ZJUMP_DATA_DIR=" + data, "TERM=xterm"})
+	if code != 0 {
+		t.Fatalf("bash: script failed: %s", out)
+	}
+
+	first := between(out, "FIRST", "SECOND")
+	for _, want := range []string{"appstore", "apple", "application"} {
+		if !strings.Contains(first, want) {
+			t.Errorf("bash first-tab candidates %q missing %q", first, want)
+		}
+	}
+	second := out[strings.Index(out, "SECOND"):]
+	if !strings.Contains(second, "banana") {
+		t.Errorf("bash second-tab listing %q missing indexed candidate banana", second)
+	}
+}
+
+// between returns the substring of s strictly after the first occurrence of
+// start and before the next occurrence of end (or the end of s).
+func between(s, start, end string) string {
+	i := strings.Index(s, start)
+	if i < 0 {
+		return ""
+	}
+	rest := s[i+len(start):]
+	if j := strings.Index(rest, end); j >= 0 {
+		return rest[:j]
+	}
+	return rest
+}

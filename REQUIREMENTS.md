@@ -361,6 +361,39 @@ parity only, so extensions live in the README, not DESIGN.md).
   entries during `db.Stream.Next()` (R-QRY-10) persist as usual; a pure
   listing with no deletions triggers no DB rewrite.
 
+### 2.14 Keyword tab completion (`zz <word><TAB>`)
+
+Keyword completion is a zjump-only extension with no zoxide equivalent: the
+generated shell integration calls a hidden `zjump complete` subcommand to turn a
+half-typed `zz` keyword into candidates. Recorded as `R-COMPLETE-*` and mirrored
+in the README; DESIGN.md documents upstream parity only.
+
+- **R-COMPLETE-1** `zjump complete [--top N] -- <WORD>` prints one candidate per
+  line as `GROUP<TAB>WORD<TAB>DISPLAY`, where GROUP is `match`, `completion`, or
+  `indexed`. It is hidden (absent from `printUsage`) and never errors loudly:
+  a missing database or alias store degrades to current-directory candidates.
+- **R-COMPLETE-2** The `match` section is the single-Tab candidate set, in
+  priority order: subdirectories of the current working directory, then alias
+  names, then indexed directories, each selected by case-insensitive **prefix**
+  of the basename. Dotfiles are offered only when `<WORD>` starts with `.`.
+  Candidates must exist on disk (aliases and DB entries are existence-filtered).
+- **R-COMPLETE-3** The `completion` section lists up to `--top` (default 10)
+  aliases/directories whose basename contains `<WORD>` as a **subsequence** but
+  was not already emitted, ranked by smallest gap, then frecency, then name.
+- **R-COMPLETE-4** The `indexed` section lists up to `--top` highest-frecency
+  directories regardless of `<WORD>`, excluding words already emitted. Completion
+  never lazily deletes or rewrites the database (it bypasses `db.Stream`).
+- **R-COMPLETE-5** The zsh integration inserts the longest common prefix of the
+  `match` section on the first Tab; on the second Tab it additionally lists the
+  `completion` (fuzzy) and `indexed` sections under bold headers via `compadd`
+  groups (`-U` for the non-prefix groups, insertion suppressed). When `match` is
+  empty it falls back to native directory completion (`_cd -/`).
+- **R-COMPLETE-6** The bash integration (bash ≥ 4.4) mirrors R-COMPLETE-5: the
+  first Tab offers the `match` words for readline's common-prefix insertion; a
+  second Tab (`COMP_TYPE='?'`) appends the `completion`/`indexed` words. Bash
+  lists the double-Tab candidates flat (no grouped headers). When `match` is
+  empty it falls back to `compgen -A directory`.
+
 ---
 
 ## 3. Out of scope (explicit non-goals for this effort)

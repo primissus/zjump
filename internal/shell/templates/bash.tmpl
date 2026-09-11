@@ -198,8 +198,32 @@ if [[ ${BASH_VERSINFO[0]:-0} -eq 4 && ${BASH_VERSINFO[1]:-0} -ge 4 || ${BASH_VER
         # Only show completions when the cursor is at the end of the line.
         [[ ${#COMP_WORDS[@]} -eq $((COMP_CWORD + 1)) ]] || return
 
-        # If there is only one argument, use `cd` completions.
+        # If there is only one argument, complete a jump keyword.
         if [[ ${#COMP_WORDS[@]} -eq 2 ]]; then
+            # zjump extension: candidates come from the current directory,
+            # aliases, and the frecency database. The first Tab lets readline
+            # insert the longest common prefix; a second Tab (COMP_TYPE '?')
+            # additionally lists the fuzzy (completion) and frecency (indexed)
+            # candidates. (`__zjump complete` prints "group\tword\tdisplay".)
+            if [[ -n ${COMP_WORDS[1]} ]]; then
+                \builtin local __zjump_group __zjump_word __zjump_desc
+                \builtin local -a __zjump_cands
+                \builtin local __zjump_list_all=0
+                __zjump_cands=()
+                [[ ${COMP_TYPE:-} == '?' ]] && __zjump_list_all=1
+                while IFS=$'\t' read -r __zjump_group __zjump_word __zjump_desc; do
+                    case "${__zjump_group}" in
+                        match) __zjump_cands+=("${__zjump_word}") ;;
+                        completion|indexed)
+                            [[ ${__zjump_list_all} -eq 1 ]] && __zjump_cands+=("${__zjump_word}") ;;
+                    esac
+                done < <(__zjump complete -- "${COMP_WORDS[1]}" 2>/dev/null)
+                if [[ ${#__zjump_cands[@]} -gt 0 ]]; then
+                    COMPREPLY=("${__zjump_cands[@]}")
+                    return
+                fi
+            fi
+            # No keyword candidates: native directory completion.
             \builtin mapfile -t COMPREPLY < <(
                 \builtin compgen -A directory -- "${COMP_WORDS[-1]}" || \builtin true
             )

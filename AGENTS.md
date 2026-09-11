@@ -15,8 +15,11 @@
   verifying its SHA256, and atomically replacing the running binary. The
   typed-entries port (2026-08-29) adds typed DB entries (dir/repo kinds, format
   v2 with one-way v1 upgrade), `query --type dir|repo|worktree|alias|any`,
-  and `zjump index` — spec in [`PLAN-GIT.md`](./PLAN-GIT.md). Source lives under
-  `cmd/zjump` and `internal/*`;
+  and `zjump index` — spec in [`PLAN-GIT.md`](./PLAN-GIT.md). Keyword tab
+  completion (2026-09-10): `zz <word><TAB>` completes from current dir +
+  aliases + indexed dirs, `<TAB><TAB>` lists match/fuzzy/indexed sections,
+  backed by the hidden `zjump complete` subcommand (spec `R-COMPLETE-*`). Source
+  lives under `cmd/zjump` and `internal/*`;
   `go test ./...` is the dependency-free suite and
   `go test -tags shelltests ./...` adds the real bash/zsh/fzf/git integration
   tests.

@@ -46,6 +46,8 @@ zz -- <path>        # cd into an exact path, bypassing keyword matching
 zzi foo             # cd with interactive selection (using fzf)
 
 zz foo<SPACE><TAB>  # show interactive completions (bash 4.4+/zsh only)
+zz ap<TAB>          # complete a jump keyword (current dir + aliases + DB)
+zz ap<TAB><TAB>     # list candidates: dirs, closest completions, top indexed
 
 # --- Alias features ---
 zz -a lngName this-is-a-long-complex-name-v2  # create an alias 'lngName' → long dir
@@ -70,9 +72,9 @@ algorithms below.
 ## Special features
 
 Frecency covers the "directories I visit often" case, but a lot of everyday
-navigation is about **git**, not visit frequency. zjump ships three extensions
-with no zoxide equivalent for exactly those cases: named aliases, branch jumps,
-and worktree jumps.
+navigation is about **git**, not visit frequency. zjump ships several
+extensions with no zoxide equivalent for exactly those cases — named aliases,
+branch jumps, worktree jumps, and keyword tab completion.
 
 ### Named aliases
 
@@ -133,6 +135,28 @@ into the frecency database, so after one `zz -w`/`zz -b` you can jump to any of
 its worktrees with a plain `zz <keyword>`. Set
 `_ZJUMP_AUTO_INDEX_DIRECTORY=1` to have every `cd` into a repo seed its
 worktrees automatically.
+
+### Keyword tab completion
+
+Frecency gets you close, but a half-typed keyword still leaves you guessing the
+exact spelling. Typing a prefix and pressing <kbd>Tab</kbd> completes a jump
+keyword from three sources, in priority order: **subdirectories of the current
+directory**, **aliases**, and **indexed directories**. The first
+<kbd>Tab</kbd> inserts their longest common prefix, so with `apple` and
+`application` on hand `zz ap<TAB>` completes to `zz appl`.
+
+A second <kbd>Tab</kbd> lists the candidates in three sections:
+
+1. **Directories** — the matching current-directory entries, aliases, and
+   indexed directories.
+2. **Closest completions** — the top 10 fuzzy-close aliases/directories (by
+   subsequence, not spelling).
+3. **Indexed directories** — the top 10 highest-frecency directories,
+   regardless of what you typed.
+
+This is a zjump-only extension; the candidate lists are produced by the hidden
+`zjump complete` subcommand. Grouped section headers require zsh; bash lists the
+double-<kbd>Tab</kbd> candidates flat (bash has no grouped completions).
 
 ## Installation
 

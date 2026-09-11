@@ -64,6 +64,10 @@ func Run(args []string) error {
 		return runList(rest[1:])
 	case "update":
 		return runUpdate(rest[1:])
+	case "complete":
+		// Hidden: called by the generated bash/zsh completion scripts, not
+		// documented in printUsage (a shell implementation detail).
+		return runComplete(rest[1:])
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return nil
