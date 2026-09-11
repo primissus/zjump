@@ -32,6 +32,7 @@ Run with `go test -tags shelltests ./test/` for git-dependent cases.
 | A-04 | Local dir beats alias | `./proj` exists as a real directory. `zz proj` from parent | cd into `./proj` (superset-of-cd rule) | — |
 | A-05 | Multi-keyword skips alias | `zz proj tools` (2 keywords) | frecency query, never alias | — |
 | A-06 | `zzi <alias>` skips alias | `zzi proj` | fzf picker with frecency matches, alias ignored | — |
+| A-06b | `zzi -a` scored alias pick | `zzi -a` | fzf picker of aliases, each prefixed by its target's frecency, best first | alias with top-scored target |
 | A-07 | `query --list <alias>` skips alias | `zjump query --list proj` | frecency matches listed, alias ignored | — |
 | A-08 | Dangling alias → clear error | Delete alias target dir. `zz lostalias` | `alias "lostalias" points to a directory that no longer exists: <path>` | — |
 | A-09 | Alias == $PWD | `zz here` where alias `here` → current dir | `you are already in the only match` | — |

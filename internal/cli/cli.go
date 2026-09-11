@@ -189,7 +189,8 @@ Commands:
     init <bash|zsh>            Print the shell integration script
     edit                       Interactively browse/edit the database (needs fzf)
     alias [<name> <dir>]      List, create, or delete directory aliases;
-                              --pick interactively selects via fzf
+                              --pick interactively selects via fzf,
+                              --pick --score ranks by target frecency
     branch <name> [repo...]   Print the worktree path for a checked-out branch
     worktree <name> [repo...] Print a worktree path by name or branch;
                               --all fzf-picks worktrees across all repos in DB

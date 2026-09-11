@@ -44,6 +44,10 @@ zz -                # cd into the previous directory
 zz -- <path>        # cd into an exact path, bypassing keyword matching
 
 zzi foo             # cd with interactive selection (using fzf)
+zzi -a              # fzf-pick an alias, ranked by target frecency
+
+zz --help           # show usage (also: zzi --help)
+zz --version        # print zjump's version (also: zzi --version / -v)
 
 zz foo<SPACE><TAB>  # show interactive completions (bash 4.4+/zsh only)
 zz ap<TAB>          # complete a jump keyword (current dir + aliases + DB)
@@ -90,6 +94,7 @@ zz lngName                                    # jump instantly, no tab-complete 
 zz lngV1                                      # aliases beat frecency — always
 
 zz -a                                         # no name? fzf-pick an alias
+zzi -a                                        # ...ranked by target frecency
 ```
 
 Aliases map long, versioned directory names to short mnemonics you choose — so
@@ -358,6 +363,10 @@ database.
 - `zjump alias --pick` — interactively select an alias via fzf and print its
   path (wired to the shell as bare `zz -a`). Cannot be combined with
   `--delete` or positional args; errors when no aliases exist.
+- `zjump alias --pick --score` — as `--pick`, but each row is prefixed by its
+  target directory's decayed frecency score and the list is sorted best-first
+  (wired to the shell as `zzi -a`). Aliases whose target is not in the
+  frecency database score `0.0`.
 
 Aliases are stored in `<data-dir>/aliases` — a separate versioned binary file
 with the same crash-safe atomic writes as the database.

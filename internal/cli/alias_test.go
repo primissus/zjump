@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/primissus/zjump/internal/db"
 )
 
 // TestRunAliasPick_NoAliases asserts that --pick returns an error (rather than
@@ -65,5 +67,62 @@ func TestRunAliasPick_RejectsCombined(t *testing.T) {
 	}
 	if err := runAlias([]string{"--pick", "name", "dir"}); err == nil {
 		t.Error("expected error combining --pick with positional args, got nil")
+	}
+}
+
+// TestRunAliasScoreRequiresPick asserts --score is rejected unless --pick is
+// also given, so it can never be silently ignored.
+func TestRunAliasScoreRequiresPick(t *testing.T) {
+	t.Setenv("_ZJUMP_DATA_DIR", t.TempDir())
+
+	err := runAlias([]string{"--score"})
+	if err == nil || !strings.Contains(err.Error(), "requires --pick") {
+		t.Errorf("runAlias --score err = %v, want 'requires --pick'", err)
+	}
+}
+
+// TestRunAliasPickScored_SingleAlias asserts the single-offer fast path still
+// prints the target path when --score is set (no fzf needed).
+func TestRunAliasPickScored_SingleAlias(t *testing.T) {
+	setupDataDir(t)
+	target := t.TempDir()
+	preload(t, func(d *db.Database) {
+		d.AddUpdate(target, 3.0, nowEpoch(), db.KindDir)
+	})
+	if err := runAlias([]string{"myalias", target}); err != nil {
+		t.Fatalf("create alias: %v", err)
+	}
+
+	out, err := captureStdout(t, func() error { return runAlias([]string{"--pick", "--score"}) })
+	if err != nil {
+		t.Fatalf("runAlias --pick --score error: %v", err)
+	}
+	if got := strings.TrimSpace(out); got != target {
+		t.Errorf("got %q, want %q", got, target)
+	}
+}
+
+// TestAliasTargetScores verifies the alias score is the target's clamped
+// frecency and that an untracked target scores 0 (absent key).
+func TestAliasTargetScores(t *testing.T) {
+	setupDataDir(t)
+	hot, cold := t.TempDir(), t.TempDir()
+	preload(t, func(d *db.Database) {
+		d.AddUpdate(hot, 5.0, nowEpoch(), db.KindRepo)
+		d.AddUpdate(cold, 1.0, nowEpoch(), db.KindDir)
+	})
+
+	scores, err := aliasTargetScores()
+	if err != nil {
+		t.Fatalf("aliasTargetScores: %v", err)
+	}
+	if scores[hot] <= scores[cold] {
+		t.Errorf("expected hot (%v) > cold (%v)", scores[hot], scores[cold])
+	}
+	if scores[cold] <= 0 {
+		t.Errorf("expected cold score > 0, got %v", scores[cold])
+	}
+	if got := scores["/not/in/the/database"]; got != 0 {
+		t.Errorf("untracked target score = %v, want 0", got)
 	}
 }

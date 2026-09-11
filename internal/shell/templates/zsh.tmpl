@@ -26,6 +26,19 @@ __zjump() {
     {{- end }}
 }
 
+# Print the "zjump, jump command "<cmd>" v<version>" banner shown by --help,
+# where <cmd> is the command the user invoked. The version is read from the
+# binary at call time (not baked at init) so it stays correct after `zjump update`.
+function __zjump_version_banner() {
+    \builtin local cmd="$1" version=''
+    version="$(__zjump --version 2>/dev/null)" && version="${version#* }"
+    if [[ -n "${version}" ]]; then
+        \builtin printf 'zjump, jump command "%s" v%s\n' "${cmd}" "${version}"
+    else
+        \builtin printf 'zjump, jump command "%s"\n' "${cmd}"
+    fi
+}
+
 # =============================================================================
 #
 # Hook configuration for zjump.
@@ -82,7 +95,9 @@ function __zjump_doctor() {
 function __zjump_z() {
     __zjump_doctor
     if [[ "$#" -eq 1 && ( "$1" = '--help' || "$1" = '-h' ) ]]; then
+        __zjump_version_banner "{{ .Cmd }}"
         \builtin printf '%s\n' \
+            '' \
             'Usage: {{ .Cmd }} [OPTIONS] [KEYWORD]' \
             '' \
             'Jump to a directory using keywords or flags.' \
@@ -94,10 +109,14 @@ function __zjump_z() {
             '  -w, --worktree <NAME>        Jump to a git worktree by name' \
             '  -W, --worktree-all           fzf-pick worktrees across all repos' \
             '  -h, --help                   Show this help message' \
+            '  -v, --version                Show version' \
             '' \
             'Without arguments, jumps to $HOME.' \
             'Use - to jump to the previous directory.' \
             'Use -- <PATH> to jump to an exact path.'
+        return
+    elif [[ "$#" -eq 1 && ( "$1" = '--version' || "$1" = '-v' ) ]]; then
+        __zjump_version_banner "{{ .Cmd }}"
         return
     elif [[ "$#" -eq 0 ]]; then
         __zjump_cd ~
@@ -132,11 +151,33 @@ function __zjump_z() {
     fi
 }
 
-# Jump to a directory using interactive search.
+# Jump to a directory using interactive search. Bare `-a`/`--alias` opens the
+# alias picker ranked by each target's frecency score.
 function __zjump_zi() {
     __zjump_doctor
+    if [[ "$#" -eq 1 && ( "${1:-}" = '--help' || "${1:-}" = '-h' ) ]]; then
+        __zjump_version_banner "{{ .Cmd }}i"
+        \builtin printf '%s\n' \
+            '' \
+            'Usage: {{ .Cmd }}i [OPTIONS] [KEYWORD]' \
+            '' \
+            'Jump to a directory using interactive search.' \
+            '' \
+            'Options:' \
+            '  -a, --alias   Interactively pick an alias, ranked by target frecency' \
+            '  -h, --help    Show this help message' \
+            '  -v, --version Show version'
+        return
+    elif [[ "$#" -eq 1 && ( "${1:-}" = '--version' || "${1:-}" = '-v' ) ]]; then
+        __zjump_version_banner "{{ .Cmd }}i"
+        return
+    fi
     \builtin local result
-    result="$(__zjump query --interactive -- "$@")" && __zjump_cd "${result}"
+    if [[ "$#" -eq 1 && ( "${1:-}" = "-a" || "${1:-}" = "--alias" ) ]]; then
+        result="$(__zjump alias --pick --score)" && __zjump_cd "${result}"
+    else
+        result="$(__zjump query --interactive -- "$@")" && __zjump_cd "${result}"
+    fi
 }
 
 # =============================================================================
